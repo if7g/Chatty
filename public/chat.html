@@ -11,28 +11,41 @@
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <h2>Chatty</h2>
+        <div class="sidebar-logo">
+          <span class="sidebar-logo-dot"></span>
+          Chatty
+        </div>
         <button id="newChatBtn" class="new-chat-btn" title="New Chat">+</button>
       </div>
-      
+
       <div class="model-selector">
         <select id="modelSelect">
-          <option value="deepseek">Deepseek</option>
-          <option value="grok">Grok</option>
+          <option value="">Loading models…</option>
         </select>
       </div>
 
+      <div class="available-models-section"></div>
+
+      <div class="search-section">
+        <input type="text" id="searchInput" placeholder="Search chats…" class="search-input" autocomplete="off" />
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+
       <div class="chat-history-section">
-        <div class="history-label">Recent Chats</div>
-        <div class="chat-history" id="chatHistory">
-          <!-- Chat history will be loaded here -->
-        </div>
+        <div class="history-label">Recent</div>
+        <div class="chat-history" id="chatHistory"></div>
       </div>
 
       <div class="sidebar-footer">
-        <button id="resetBtn" class="footer-btn">🔄 Clear Memory</button>
-        <button id="settingsBtn" class="footer-btn">⚙️ Settings</button>
-        <button id="logoutBtn" class="footer-btn">🚪 Logout</button>
+        <button id="resetBtn" class="footer-btn">
+          <span>↺</span> Clear Memory
+        </button>
+        <button id="settingsBtn" class="footer-btn">
+          <span>⚙</span> Settings
+        </button>
+        <button id="logoutBtn" class="footer-btn danger">
+          <span>→</span> Logout
+        </button>
       </div>
     </div>
 
@@ -41,183 +54,477 @@
       <div class="chat-header">
         <div class="chat-title" id="chatTitle">New Chat</div>
         <div class="chat-header-actions">
-          <button id="saveBtn" class="header-btn" title="Save Chat">💾</button>
-          <button id="shareBtn" class="header-btn" title="Share">📤</button>
-          <button id="renameBtn" class="header-btn" title="Rename">✏️</button>
+          <button id="saveBtn" class="header-btn" title="Save Chat">Save</button>
+          <button id="shareBtn" class="header-btn" title="Share" disabled>Share</button>
+          <button id="renameBtn" class="header-btn" title="Rename">Rename</button>
         </div>
       </div>
 
       <div id="chat-box">
         <div class="empty-state">
-          <h3>How can I help you today?</h3>
+          <div class="empty-state-icon">✦</div>
+          <h3>How can I help?</h3>
           <p>Start a conversation by typing a message below</p>
         </div>
       </div>
 
       <div class="input-container">
+        <div id="imagePreviewStrip" class="image-preview-strip hidden"></div>
         <div class="input-wrapper">
-          <textarea id="messageBox" placeholder="Message..." rows="1"></textarea>
-          <button id="sendBtn" class="send-btn">Send</button>
+          <label for="imageUploadInput" class="upload-btn" title="Attach image">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </label>
+          <input type="file" id="imageUploadInput" accept="image/*" style="display:none" />
+          <textarea id="messageBox" placeholder="Message…" rows="1"></textarea>
+          <button id="imageGenBtn" class="image-gen-btn" title="Generate image">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </button>
+          <button id="sendBtn">Send</button>
         </div>
       </div>
 
       <div class="footer-note">
-        Powered by <a href="https://openrouter.ai/">OpenRouter</a> • Your chats are saved automatically
+        Powered by <a href="https://build.nvidia.com" target="_blank">NVIDIA NIM</a> &middot; Chats saved automatically
       </div>
     </div>
   </div>
 
-  <!-- Modal for renaming chat -->
+  <!-- Rename Modal -->
   <div id="renameModal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Rename Chat</h3>
         <button id="closeRenameModal" class="close-btn">×</button>
       </div>
-      <input type="text" id="renameInput" placeholder="Enter new chat name..." />
+      <input type="text" id="renameInput" placeholder="Enter chat name…" />
       <div class="modal-actions">
-        <button id="cancelRenameBtn" class="modal-btn cancel">Cancel</button>
+        <button id="cancelRenameBtn" class="modal-btn">Cancel</button>
         <button id="confirmRenameBtn" class="modal-btn confirm">Save</button>
       </div>
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-content wide-modal">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button id="closeSettingsModal" class="close-btn">×</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="settings-section">
+          <h4>Display</h4>
+          <label><input type="checkbox" id="settingTimestamps" /> Show message timestamps</label>
+          <label><input type="checkbox" id="settingAutoSave" /> Auto-save chats</label>
+        </div>
+
+        <hr />
+
+        <div class="settings-section">
+          <h4>Model Parameters</h4>
+
+          <div class="slider-row">
+            <div class="slider-label">Temperature <span id="tempValue">0.7</span></div>
+            <input type="range" id="temperatureSlider" min="0" max="2" step="0.1" value="0.7" class="slider" />
+            <small>Lower = more focused &nbsp;·&nbsp; Higher = more creative</small>
+          </div>
+
+          <div class="slider-row">
+            <div class="slider-label">Max Tokens <span id="tokensValue">2048</span></div>
+            <input type="range" id="maxTokensSlider" min="256" max="4096" step="256" value="2048" class="slider" />
+          </div>
+
+          <div class="slider-row">
+            <div class="slider-label">Top P <span id="topPValue">1.0</span></div>
+            <input type="range" id="topPSlider" min="0" max="1" step="0.05" value="1.0" class="slider" />
+          </div>
+        </div>
+
+        <hr />
+
+        <div class="settings-section">
+          <h4>System Prompt</h4>
+          <textarea id="systemPromptInput" class="system-prompt-textarea"
+            placeholder="Give the AI a role or set of instructions (e.g. 'You are a concise Python expert')…"></textarea>
+          <small>Defines the AI's behaviour. Leave empty for default.</small>
+        </div>
+
+        <hr />
+
+        <div class="settings-section">
+          <h4>Export Conversation</h4>
+          <div class="export-buttons">
+            <button id="exportMarkdownBtn" class="modal-btn">Markdown</button>
+            <button id="exportJsonBtn" class="modal-btn">JSON</button>
+            <button id="exportBtn" class="modal-btn">Plain text</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-actions">
+        <button id="closeSettingsBtn" class="modal-btn confirm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Generation Modal -->
+  <div id="imageGenModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Generate Image</h3>
+        <button id="closeImageGenModal" class="close-btn">×</button>
+      </div>
+      <div class="modal-body" style="margin-bottom:0">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+          Powered by NVIDIA NIM · FLUX Schnell · Free tier
+        </p>
+        <textarea id="imagePromptInput" class="system-prompt-textarea" style="min-height:90px"
+          placeholder="Describe the image… e.g. 'a red fox in a snowy forest, digital art, cinematic lighting'"></textarea>
+        <small style="margin-bottom:12px;display:block">Tip: be descriptive — include style, lighting, mood, and subject.</small>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+          <label style="font-size:12px;color:var(--text-secondary);flex-shrink:0">Size:</label>
+          <select id="imageSizeSelect" style="flex:1;padding:6px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px;font-family:var(--font-mono);outline:none">
+            <option value="1024x1024">1024 × 1024 (square)</option>
+            <option value="1344x768">1344 × 768 (landscape)</option>
+            <option value="768x1344">768 × 1344 (portrait)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button id="cancelImageGenBtn" class="modal-btn">Cancel</button>
+        <button id="confirmImageGenBtn" class="modal-btn confirm">Generate</button>
+      </div>
+    </div>
+  </div>
+
 <script>
-const chatBox = document.getElementById("chat-box");
-const messageBox = document.getElementById("messageBox");
-const modelSelect = document.getElementById("modelSelect");
-const sendBtn = document.getElementById("sendBtn");
-const resetBtn = document.getElementById("resetBtn");
-const newChatBtn = document.getElementById("newChatBtn");
-const saveBtn = document.getElementById("saveBtn");
-const renameBtn = document.getElementById("renameBtn");
-const logoutBtn = document.getElementById("logoutBtn");
-const chatHistory = document.getElementById("chatHistory");
-const chatTitle = document.getElementById("chatTitle");
-const emptyState = document.querySelector(".empty-state");
-const renameModal = document.getElementById("renameModal");
-const renameInput = document.getElementById("renameInput");
-const confirmRenameBtn = document.getElementById("confirmRenameBtn");
-const closeRenameModal = document.getElementById("closeRenameModal");
-const cancelRenameBtn = document.getElementById("cancelRenameBtn");
+/* ───────────────────────────────────────────────────────────────────
+   DOM refs
+─────────────────────────────────────────────────────────────────── */
+const chatBox           = document.getElementById("chat-box");
+const messageBox        = document.getElementById("messageBox");
+const modelSelect       = document.getElementById("modelSelect");
+const sendBtn           = document.getElementById("sendBtn");
+const resetBtn          = document.getElementById("resetBtn");
+const newChatBtn        = document.getElementById("newChatBtn");
+const saveBtn           = document.getElementById("saveBtn");
+const shareBtn          = document.getElementById("shareBtn");
+const renameBtn         = document.getElementById("renameBtn");
+const settingsBtn       = document.getElementById("settingsBtn");
+const logoutBtn         = document.getElementById("logoutBtn");
+const chatHistory       = document.getElementById("chatHistory");
+const chatTitle         = document.getElementById("chatTitle");
+const renameModal       = document.getElementById("renameModal");
+const renameInput       = document.getElementById("renameInput");
+const confirmRenameBtn  = document.getElementById("confirmRenameBtn");
+const closeRenameModal  = document.getElementById("closeRenameModal");
+const cancelRenameBtn   = document.getElementById("cancelRenameBtn");
+const settingsModal     = document.getElementById("settingsModal");
+const closeSettingsModal= document.getElementById("closeSettingsModal");
+const closeSettingsBtn  = document.getElementById("closeSettingsBtn");
+const settingTimestamps = document.getElementById("settingTimestamps");
+const settingAutoSave   = document.getElementById("settingAutoSave");
+const exportBtn         = document.getElementById("exportBtn");
+const exportMarkdownBtn = document.getElementById("exportMarkdownBtn");
+const exportJsonBtn     = document.getElementById("exportJsonBtn");
+const searchInput       = document.getElementById("searchInput");
+const searchResults     = document.getElementById("searchResults");
+const temperatureSlider = document.getElementById("temperatureSlider");
+const maxTokensSlider   = document.getElementById("maxTokensSlider");
+const topPSlider        = document.getElementById("topPSlider");
+const systemPromptInput = document.getElementById("systemPromptInput");
+const tempValue         = document.getElementById("tempValue");
+const tokensValue       = document.getElementById("tokensValue");
+const topPValue         = document.getElementById("topPValue");
 
-// State management
+const imageUploadInput  = document.getElementById("imageUploadInput");
+const imagePreviewStrip = document.getElementById("imagePreviewStrip");
+const imageGenBtn       = document.getElementById("imageGenBtn");
+const imageGenModal     = document.getElementById("imageGenModal");
+const closeImageGenModal= document.getElementById("closeImageGenModal");
+const cancelImageGenBtn = document.getElementById("cancelImageGenBtn");
+const confirmImageGenBtn= document.getElementById("confirmImageGenBtn");
+const imagePromptInput  = document.getElementById("imagePromptInput");
 let currentChatId = null;
-let currentMessages = [];
-let chatMessages = {
-    deepseek: [],
-    grok: [],
-    model1: [],
-};
+let currentMessages = [];           // [{role, content}]
+let starredMessageIndices = [];
+let isSending = false;
+let attachedImage = null; // { base64, mimeType, dataUrl, name }
 
-// Auto-resize textarea
-messageBox.addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
-});
+let modelParams = { temperature: 0.7, maxTokens: 2048, topP: 1.0 };
+let systemPrompt = "";
 
-// Escape HTML to prevent injection
+let settings = { showTimestamp: false, autoSave: true };
+
+/* ───────────────────────────────────────────────────────────────────
+   Settings persistence
+─────────────────────────────────────────────────────────────────── */
+function loadSettings() {
+  const stored = localStorage.getItem("chatty-settings");
+  if (stored) { try { Object.assign(settings, JSON.parse(stored)); } catch {} }
+  settingTimestamps.checked = settings.showTimestamp;
+  settingAutoSave.checked   = settings.autoSave;
+}
+
+function saveSettings() {
+  localStorage.setItem("chatty-settings", JSON.stringify(settings));
+}
+
+loadSettings();
+
+/* ───────────────────────────────────────────────────────────────────
+   Helpers
+─────────────────────────────────────────────────────────────────── */
+function updateActionButtons() {
+  const hasMessages = currentMessages.length > 0;
+  shareBtn.disabled = !hasMessages;
+}
+
+function setSending(val) {
+  isSending = val;
+  sendBtn.disabled = val;
+  messageBox.disabled = val;
+}
+
+function messageToText(msg) {
+  return (msg && typeof msg.content === "string") ? msg.content : "";
+}
+
+async function readApiPayload(response) {
+  const raw = await response.text();
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return { error: raw }; }
+}
+
 function escapeHTML(text) {
-  return text
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
 
-// Convert Markdown to HTML (bold, italic, strikethrough, code blocks, links, lists, etc)
-function markdownToHTML(text) {
-  // --- Auto-detect multi-line single backticks ---
-  text = text.replace(/`([\s\S]*?)`/g, (match, code) => {
-    if (code.includes("\n")) {
-      return "```\n" + code + "\n```";
+/* ───────────────────────────────────────────────────────────────────
+   Markdown → HTML
+   Strategy: split into block-level chunks first, then apply inline
+   formatting inside each chunk. This avoids <br> leaking into lists
+   and code blocks, and removes the need for white-space:pre-wrap.
+─────────────────────────────────────────────────────────────────── */
+function markdownToHTML(raw) {
+  // Normalise line endings
+  let text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // ── 1. Stash fenced code blocks (``` ... ```) ──────────────────
+  const stash = [];
+  function stashIt(html) {
+    const key = `\x00S${stash.length}\x00`;
+    stash.push(html);
+    return key;
+  }
+  function restoreStash(s) {
+    return s.replace(/\x00S(\d+)\x00/g, (_, i) => stash[parseInt(i)]);
+  }
+
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const cls = lang ? ` class="code-block ${escapeHTML(lang)}"` : ' class="code-block"';
+    return stashIt(`<pre${cls}><code>${escapeHTML(code.replace(/\n$/, ""))}</code></pre>`);
+  });
+
+  // ── 2. Split into logical blocks (blank-line separated) ────────
+  const rawBlocks = text.split(/\n{2,}/);
+
+  const blocks = rawBlocks.map(block => {
+    // Already stashed (code block placeholder)
+    if (/^\x00S\d+\x00$/.test(block.trim())) {
+      return restoreStash(block.trim());
     }
-    return match; // leave inline code
+
+    const lines = block.split("\n");
+
+    // Unordered list
+    if (lines.every(l => /^[ \t]*[-*+] /.test(l) || l.trim() === "")) {
+      const items = lines
+        .filter(l => /^[ \t]*[-*+] /.test(l))
+        .map(l => `<li>${inlineFormat(l.replace(/^[ \t]*[-*+] /, ""))}</li>`)
+        .join("");
+      return `<ul class="markdown-list">${items}</ul>`;
+    }
+
+    // Ordered list
+    if (lines.every(l => /^\d+\. /.test(l) || l.trim() === "")) {
+      const items = lines
+        .filter(l => /^\d+\. /.test(l))
+        .map(l => `<li>${inlineFormat(l.replace(/^\d+\. /, ""))}</li>`)
+        .join("");
+      return `<ol class="markdown-ol">${items}</ol>`;
+    }
+
+    // Headings (# / ## / ###)
+    if (/^#{1,3} /.test(lines[0])) {
+      return lines.map(l => {
+        const m = l.match(/^(#{1,3}) (.+)/);
+        if (!m) return `<p>${inlineFormat(l)}</p>`;
+        const level = m[1].length;
+        const tag = ["h3","h4","h5"][level - 1] || "h5";
+        return `<${tag} class="md-heading">${inlineFormat(m[2])}</${tag}>`;
+      }).join("");
+    }
+
+    // Blockquote
+    if (lines.every(l => /^> /.test(l) || l.trim() === "")) {
+      const inner = lines.filter(l => /^> /.test(l))
+        .map(l => inlineFormat(l.replace(/^> /, ""))).join("<br>");
+      return `<blockquote class="md-blockquote">${inner}</blockquote>`;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(lines[0].trim())) {
+      return `<hr class="md-hr">`;
+    }
+
+    // Plain paragraph — join lines with <br> for soft wraps
+    const html = lines.map(l => {
+      // Inline stash items (code block placeholders mid-paragraph)
+      if (/^\x00S\d+\x00$/.test(l.trim())) return restoreStash(l.trim());
+      return inlineFormat(l);
+    }).join("<br>");
+    return `<p>${html}</p>`;
   });
 
-  // --- Convert triple-backtick code blocks ---
-  text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<pre class="code-block ${lang || ''}"><code>${escapeHTML(code)}</code></pre>`;
+  return restoreStash(blocks.join("\n"));
+}
+
+/* Apply inline markdown (bold, italic, code, links, etc.)
+   Does NOT touch block-level structure. */
+function inlineFormat(text) {
+  // Stash inline code first so backtick content isn't further processed
+  const iStash = [];
+  text = text.replace(/`([^`]+)`/g, (_, code) => {
+    const key = `\x00I${iStash.length}\x00`;
+    iStash.push(`<code class="inline-code">${escapeHTML(code)}</code>`);
+    return key;
   });
 
-  // --- Convert inline code (before other formatting) ---
-  text = text.replace(/`([^`\n]+)`/g, (match, code) => {
-    return `<code class="inline-code">${escapeHTML(code)}</code>`;
-  });
+  // Links
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, title, url) =>
+    `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="markdown-link">${escapeHTML(title)}</a>`
+  );
 
-  // --- Convert links ---
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, title, url) => {
-    return `<a href="${escapeHTML(url)}" target="_blank" class="markdown-link">${escapeHTML(title)}</a>`;
-  });
+  // Bold + italic
+  text = text.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
+  text = text.replace(/___([^_]+)___/g, "<strong><em>$1</em></strong>");
+  // Bold
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+  // Italic
+  text = text.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  text = text.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+  // Strikethrough
+  text = text.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
 
-  // --- Convert bold italic ***text*** or ___text___ ---
-  text = text.replace(/\*\*\*([^\*]+)\*\*\*/g, "<b><i>$1</i></b>");
-  text = text.replace(/___([^_]+)___/g, "<b><i>$1</i></b>");
-
-  // --- Convert bold **text** or __text__ ---
-  text = text.replace(/\*\*([^\*]+)\*\*/g, "<b>$1</b>");
-  text = text.replace(/__([^_]+)__/g, "<b>$1</b>");
-
-  // --- Convert italic *text* or _text_ ---
-  text = text.replace(/\*([^\*]+)\*/g, "<i>$1</i>");
-  text = text.replace(/_([^_]+)_/g, "<i>$1</i>");
-
-  // --- Convert strikethrough ~~text~~ ---
-  text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-
-  // --- Convert unordered lists (-, *, +) ---
-  text = text.replace(/(?:^|\n)([\s]*)[-*+]\s+(.+?)(?=\n|$)/gm, (match, indent, item) => {
-    return `<li class="markdown-list-item">${item}</li>`;
-  });
-  text = text.replace(/(<li class="markdown-list-item">.*?<\/li>)/s, (match) => {
-    return `<ul class="markdown-list">${match}</ul>`;
-  });
-
-  // --- Convert numbered lists ---
-  text = text.replace(/(?:^|\n)(\d+)\.\s+(.+?)(?=\n|$)/gm, (match, num, item) => {
-    return `<li class="markdown-list-item">${item}</li>`;
-  });
-
-  // --- Convert line breaks ---
-  text = text.replace(/\n/g, "<br>");
+  // Restore inline code
+  text = text.replace(/\x00I(\d+)\x00/g, (_, i) => iStash[parseInt(i)]);
 
   return text;
 }
 
-// Add a message to the chat
-function addMessage(content, sender) {
-  if (emptyState) emptyState.remove();
+/* ───────────────────────────────────────────────────────────────────
+   Add message to DOM
+─────────────────────────────────────────────────────────────────── */
+function addMessage(content, sender, messageIndex = null, options = {}) {
+  const { persist = true, isThinking = false } = options;
+
+  // Remove empty state
+  const placeholder = chatBox.querySelector(".empty-state");
+  if (placeholder) placeholder.remove();
+
+  const safeContent = typeof content === "string" ? content : "";
 
   const messageDiv = document.createElement("div");
   messageDiv.classList.add("message", sender);
+  if (messageIndex !== null && starredMessageIndices.includes(messageIndex)) {
+    messageDiv.classList.add("starred");
+  }
 
+  // Avatar
   const avatar = document.createElement("div");
   avatar.classList.add("message-avatar");
   avatar.textContent = sender === "user" ? "U" : "AI";
 
+  // Content bubble
   const messageContent = document.createElement("div");
   messageContent.classList.add("message-content");
 
-  // Convert Markdown to HTML
-  messageContent.innerHTML = markdownToHTML(content);
+  // Error styling
+  const isError = safeContent.includes("❌") || safeContent.includes("Error") ||
+                  safeContent.includes("failed") || safeContent.includes("temporarily") ||
+                  safeContent.includes("error");
+  if (isError && sender === "ai") messageDiv.classList.add("error-message");
+
+  if (isThinking) {
+    // Animated dots instead of text
+    const dots = document.createElement("div");
+    dots.classList.add("thinking-dots");
+    dots.innerHTML = "<span></span><span></span><span></span>";
+    messageContent.appendChild(dots);
+  } else if (safeContent.trim()) {
+    const textDiv = document.createElement("div");
+    textDiv.classList.add("message-text");
+    textDiv.innerHTML = markdownToHTML(safeContent);
+    messageContent.appendChild(textDiv);
+  } else {
+    const textDiv = document.createElement("div");
+    textDiv.classList.add("message-text");
+    textDiv.textContent = "(empty message)";
+    messageContent.appendChild(textDiv);
+  }
 
   messageDiv.appendChild(avatar);
   messageDiv.appendChild(messageContent);
 
+  // Star button
+  if (messageIndex !== null) {
+    const starBtn = document.createElement("button");
+    starBtn.classList.add("message-star-btn");
+    starBtn.textContent = starredMessageIndices.includes(messageIndex) ? "⭐" : "☆";
+    starBtn.title = "Star message";
+    starBtn.onclick = () => toggleStarMessage(messageIndex, starBtn, messageDiv);
+    messageDiv.appendChild(starBtn);
+  }
+
+  // Timestamp
+  if (settings.showTimestamp && !isThinking) {
+    const ts = document.createElement("div");
+    ts.classList.add("message-time");
+    ts.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    messageContent.appendChild(ts);
+  }
+
   chatBox.appendChild(messageDiv);
   chatBox.scrollTop = chatBox.scrollHeight;
 
-  // Store message in current messages
-  currentMessages.push({ role: sender === "user" ? "user" : "assistant", content });
+  if (persist && !isThinking) {
+    currentMessages.push({
+      role: sender === "user" ? "user" : "assistant",
+      content: safeContent,
+    });
+    updateActionButtons();
+  }
+
+  return messageDiv;
 }
 
-// Load chats from server
+/* ───────────────────────────────────────────────────────────────────
+   Chat history (sidebar)
+─────────────────────────────────────────────────────────────────── */
 async function loadChatHistory() {
   try {
     const response = await fetch("/api/chats");
+    if (!response.ok) return;
     const chats = await response.json();
-    
+
     chatHistory.innerHTML = "";
-    if (chats.length === 0) {
+    if (!chats.length) {
       chatHistory.innerHTML = '<div class="no-chats">No chats yet</div>';
       return;
     }
@@ -225,14 +532,19 @@ async function loadChatHistory() {
     chats.forEach(chat => {
       const chatItem = document.createElement("div");
       chatItem.classList.add("chat-item");
+      if (chat.id === currentChatId) chatItem.classList.add("active");
+
       chatItem.innerHTML = `
-        <div class="chat-item-title">${escapeHTML(chat.title || "Untitled")}</div>
-        <div class="chat-item-meta">${chat.model} • ${new Date(chat.updated_at).toLocaleDateString()}</div>
+        <div class="chat-item-text">
+          <div class="chat-item-title">${escapeHTML(chat.title || "Untitled")}</div>
+          <div class="chat-item-meta">${escapeHTML(chat.model || "")} · ${new Date(chat.updated_at).toLocaleDateString()}</div>
+        </div>
         <div class="chat-item-actions">
-          <button class="action-btn" title="Load" onclick="loadChat(${chat.id})">📂</button>
-          <button class="action-btn delete" title="Delete" onclick="deleteChat(${chat.id})">🗑️</button>
+          <button class="action-btn" title="Load" onclick="event.stopPropagation(); loadChat(${chat.id})">📂</button>
+          <button class="action-btn delete" title="Delete" onclick="event.stopPropagation(); deleteChat(${chat.id})">🗑</button>
         </div>
       `;
+      chatItem.addEventListener("click", () => loadChat(chat.id));
       chatHistory.appendChild(chatItem);
     });
   } catch (err) {
@@ -240,71 +552,225 @@ async function loadChatHistory() {
   }
 }
 
-// Load specific chat
-async function loadChat(chatId) {
+/* ───────────────────────────────────────────────────────────────────
+   Search
+─────────────────────────────────────────────────────────────────── */
+async function searchChats(query) {
+  if (!query.trim()) {
+    searchResults.classList.add("hidden");
+    return;
+  }
   try {
-    const response = await fetch(`/api/chat/${chatId}`);
-    const chat = await response.json();
-    
-    currentChatId = chatId;
-    currentMessages = chat.messages;
-    
-    // Clear and reload chat
-    chatBox.innerHTML = "";
-    chat.messages.forEach(msg => {
-      addMessage(msg.content, msg.role === "user" ? "user" : "ai");
-    });
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const results = await response.json();
 
-    chatTitle.textContent = chat.title || "Chat";
-    modelSelect.value = chat.model;
-    
-    // Update chat memory for model
-    chatMessages[chat.model] = chat.messages;
+    searchResults.innerHTML = "";
+    if (!results.length) {
+      searchResults.innerHTML = '<div class="search-result-item">No results found</div>';
+      searchResults.classList.remove("hidden");
+      return;
+    }
+
+    results.forEach(chat => {
+      const item = document.createElement("div");
+      item.classList.add("search-result-item");
+      item.innerHTML = `
+        <div class="search-result-title">${escapeHTML(chat.title || "Untitled")}</div>
+        <div class="search-result-meta">${escapeHTML(chat.model || "")}</div>
+      `;
+      item.onclick = () => {
+        loadChat(chat.id);
+        searchResults.classList.add("hidden");
+        searchInput.value = "";
+      };
+      searchResults.appendChild(item);
+    });
+    searchResults.classList.remove("hidden");
   } catch (err) {
-    console.error("Error loading chat:", err);
-    addMessage("Error loading chat", "ai");
+    console.error("Search error:", err);
   }
 }
 
-// Save chat
-async function saveChat() {
-  if (currentMessages.length === 0) return;
+// Close search results when clicking outside
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-section")) {
+    searchResults.classList.add("hidden");
+  }
+});
 
-  const title = chatTitle.textContent === "New Chat" 
-    ? (currentMessages[0]?.content || "Untitled").substring(0, 50)
+/* ───────────────────────────────────────────────────────────────────
+   Starred messages
+─────────────────────────────────────────────────────────────────── */
+async function loadStarredMessages() {
+  if (!currentChatId) return;
+  try {
+    const response = await fetch(`/api/starred/${currentChatId}`);
+    if (!response.ok) return;
+    const starred = await response.json();
+    starredMessageIndices = starred.map(s => s.message_index);
+  } catch (err) {
+    console.error("Error loading starred:", err);
+  }
+}
+
+async function toggleStarMessage(messageIndex, buttonElement, messageDiv) {
+  if (!currentChatId) {
+    showToast("Save this chat first to star messages");
+    return;
+  }
+
+  const isStarred = starredMessageIndices.includes(messageIndex);
+
+  try {
+    if (isStarred) {
+      const response = await fetch(`/api/starred/${currentChatId}`);
+      const starred = await response.json();
+      const record = starred.find(s => s.message_index === messageIndex);
+      if (record) {
+        await fetch(`/api/starred/${record.id}`, { method: "DELETE" });
+        starredMessageIndices = starredMessageIndices.filter(i => i !== messageIndex);
+        buttonElement.textContent = "☆";
+        messageDiv.classList.remove("starred");
+      }
+    } else {
+      const response = await fetch("/api/starred", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: currentChatId, messageIndex }),
+      });
+      if (response.ok) {
+        starredMessageIndices.push(messageIndex);
+        buttonElement.textContent = "⭐";
+        messageDiv.classList.add("starred");
+      }
+    }
+  } catch (err) {
+    console.error("Error toggling star:", err);
+    showToast("Failed to update star");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Chat settings (temperature etc.)
+─────────────────────────────────────────────────────────────────── */
+async function loadChatSettings() {
+  if (!currentChatId) return;
+  try {
+    const response = await fetch(`/api/chat-settings/${currentChatId}`);
+    if (!response.ok) return;
+    const s = await response.json();
+    modelParams = {
+      temperature: s.temperature ?? 0.7,
+      maxTokens:   s.max_tokens  ?? 2048,
+      topP:        s.top_p       ?? 1.0,
+    };
+    systemPrompt = s.system_prompt || "";
+    temperatureSlider.value = modelParams.temperature;
+    maxTokensSlider.value   = modelParams.maxTokens;
+    topPSlider.value        = modelParams.topP;
+    systemPromptInput.value = systemPrompt;
+    updateSliderValues();
+  } catch (err) {
+    console.error("Error loading chat settings:", err);
+  }
+}
+
+async function saveChatSettings() {
+  if (!currentChatId) return;
+  try {
+    await fetch(`/api/chat-settings/${currentChatId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemPrompt: systemPromptInput.value,
+        temperature:  parseFloat(temperatureSlider.value),
+        maxTokens:    parseInt(maxTokensSlider.value),
+        topP:         parseFloat(topPSlider.value),
+      }),
+    });
+  } catch (err) {
+    console.error("Error saving settings:", err);
+  }
+}
+
+function updateSliderValues() {
+  tempValue.textContent   = parseFloat(temperatureSlider.value).toFixed(1);
+  tokensValue.textContent = maxTokensSlider.value;
+  topPValue.textContent   = parseFloat(topPSlider.value).toFixed(2);
+  modelParams.temperature = parseFloat(temperatureSlider.value);
+  modelParams.maxTokens   = parseInt(maxTokensSlider.value);
+  modelParams.topP        = parseFloat(topPSlider.value);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Load / Save / Delete chat
+─────────────────────────────────────────────────────────────────── */
+async function loadChat(chatId) {
+  try {
+    const response = await fetch(`/api/chat/${chatId}`);
+    if (!response.ok) throw new Error("Not found");
+    const chat = await response.json();
+
+    currentChatId = chatId;
+    currentMessages = [];
+    starredMessageIndices = [];
+
+    chatBox.innerHTML = "";
+    const msgs = Array.isArray(chat.messages) ? chat.messages : [];
+
+    // Load starred first so we can mark them while rendering
+    await loadStarredMessages();
+
+    msgs.forEach((msg, idx) => {
+      const sender = msg.role === "user" ? "user" : "ai";
+      // persist:false because we rebuild currentMessages manually below
+      addMessage(msg.content || "", sender, idx, { persist: false });
+      currentMessages.push({ role: msg.role, content: msg.content || "" });
+    });
+
+    chatTitle.textContent = chat.title || "Chat";
+    modelSelect.value     = chat.model || modelSelect.value;
+
+    await loadChatSettings();
+    updateActionButtons();
+    loadChatHistory(); // refresh sidebar active state
+  } catch (err) {
+    console.error("Error loading chat:", err);
+    showToast("Error loading chat");
+  }
+}
+
+async function saveChat() {
+  if (!currentMessages.length) return;
+
+  const title = chatTitle.textContent === "New Chat"
+    ? (messageToText(currentMessages[0]) || "Untitled").substring(0, 60)
     : chatTitle.textContent;
   const model = modelSelect.value;
 
   try {
-    let endpoint = "/api/save-chat";
-    let method = "POST";
-    let body = { title, model, messages: currentMessages };
-
-    if (currentChatId) {
-      endpoint = `/api/chat/${currentChatId}`;
-      method = "PUT";
-    }
+    let endpoint = "/api/save-chat", method = "POST";
+    if (currentChatId) { endpoint = `/api/chat/${currentChatId}`; method = "PUT"; }
 
     const response = await fetch(endpoint, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ title, model, messages: currentMessages }),
     });
-
     const data = await response.json();
     if (data.id) currentChatId = data.id;
-    
+
     chatTitle.textContent = title;
+    showToast("Saved ✓");
     loadChatHistory();
   } catch (err) {
     console.error("Error saving chat:", err);
+    showToast("Save failed");
   }
 }
 
-// Delete chat
 async function deleteChat(chatId) {
-  if (!confirm("Are you sure you want to delete this chat?")) return;
-
+  if (!confirm("Delete this chat?")) return;
   try {
     await fetch(`/api/chat/${chatId}`, { method: "DELETE" });
     if (currentChatId === chatId) newChatSession();
@@ -314,103 +780,584 @@ async function deleteChat(chatId) {
   }
 }
 
-// New chat session
 function newChatSession() {
   currentChatId = null;
   currentMessages = [];
-  chatBox.innerHTML = '<div class="empty-state"><h3>How can I help you today?</h3><p>Start a conversation by typing a message below</p></div>';
+  starredMessageIndices = [];
+  chatBox.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-state-icon">✦</div>
+      <h3>How can I help?</h3>
+      <p>Start a conversation by typing a message below</p>
+    </div>`;
   chatTitle.textContent = "New Chat";
-  const model = modelSelect.value;
-  chatMessages[model] = [];
+  updateActionButtons();
+
+  // Deselect active chat item in sidebar
+  document.querySelectorAll(".chat-item.active").forEach(el => el.classList.remove("active"));
 }
 
-// Send message to server
-async function sendMessage(reset = false) {
+/* ───────────────────────────────────────────────────────────────────
+   Image upload / attachment
+─────────────────────────────────────────────────────────────────── */
+function handleImageUpload(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    showToast("Please select an image file");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showToast("Image too large — max 10 MB");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    // dataUrl = "data:image/jpeg;base64,XXXX..."
+    const [header, base64] = dataUrl.split(",");
+    const mimeType = header.match(/data:([^;]+)/)[1];
+
+    attachedImage = { base64, mimeType, dataUrl, name: file.name };
+    showImagePreview(dataUrl, file.name);
+    messageBox.placeholder = "Ask something about this image…";
+    messageBox.focus();
+  };
+  reader.readAsDataURL(file);
+}
+
+function showImagePreview(dataUrl, name) {
+  imagePreviewStrip.innerHTML = "";
+  imagePreviewStrip.classList.remove("hidden");
+
+  const thumb = document.createElement("div");
+  thumb.classList.add("preview-thumb");
+
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.alt = name;
+
+  const removeBtn = document.createElement("button");
+  removeBtn.classList.add("preview-remove");
+  removeBtn.innerHTML = "×";
+  removeBtn.title = "Remove image";
+  removeBtn.onclick = clearAttachedImage;
+
+  const label = document.createElement("span");
+  label.classList.add("preview-label");
+  label.textContent = name.length > 24 ? name.slice(0, 22) + "…" : name;
+
+  thumb.appendChild(img);
+  thumb.appendChild(removeBtn);
+  imagePreviewStrip.appendChild(thumb);
+  imagePreviewStrip.appendChild(label);
+}
+
+function clearAttachedImage() {
+  attachedImage = null;
+  imagePreviewStrip.classList.add("hidden");
+  imagePreviewStrip.innerHTML = "";
+  imageUploadInput.value = "";
+  messageBox.placeholder = "Message…";
+}
+
+// Render an uploaded image inside a user message bubble
+function addUploadedImageToMessage(messageContent, dataUrl, name) {
+  const imgWrap = document.createElement("div");
+  imgWrap.classList.add("uploaded-image-wrap");
+
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.alt = name;
+  img.classList.add("uploaded-image");
+
+  imgWrap.appendChild(img);
+  messageContent.appendChild(imgWrap);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Send message
+─────────────────────────────────────────────────────────────────── */
+async function sendMessage() {
   const message = messageBox.value.trim();
-  const model = modelSelect.value;
-  if (!message && !reset) return;
+  const model   = modelSelect.value;
+  if (!message && !attachedImage) return;
+  if (!model) { showToast("Select a model first"); return; }
+  if (isSending) return;
 
-  if (!reset) addMessage(message, "user");
+  setSending(true);
+
+  // Build user bubble — may include an image preview
+  const userMsgIndex = currentMessages.length;
+  if (attachedImage) {
+    // Create user bubble manually so we can insert the image thumbnail
+    const placeholder = chatBox.querySelector(".empty-state");
+    if (placeholder) placeholder.remove();
+
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("message", "user");
+
+    const avatar = document.createElement("div");
+    avatar.classList.add("message-avatar");
+    avatar.textContent = "U";
+
+    const messageContent = document.createElement("div");
+    messageContent.classList.add("message-content");
+
+    addUploadedImageToMessage(messageContent, attachedImage.dataUrl, attachedImage.name);
+
+    if (message) {
+      const textDiv = document.createElement("div");
+      textDiv.classList.add("message-text");
+      textDiv.innerHTML = inlineFormat(message);
+      messageContent.appendChild(textDiv);
+    }
+
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+    chatBox.appendChild(messageDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    currentMessages.push({
+      role: "user",
+      content: message ? `[Image: ${attachedImage.name}] ${message}` : `[Image: ${attachedImage.name}]`,
+    });
+    updateActionButtons();
+  } else {
+    addMessage(message, "user", userMsgIndex);
+  }
+
+  const imageToSend = attachedImage ? { ...attachedImage } : null;
+
   messageBox.value = "";
-  messageBox.style.height = 'auto';
+  messageBox.style.height = "auto";
+  clearAttachedImage();
 
-  addMessage(reset ? "🔄 Clearing memory..." : "🤖 Thinking...", "ai");
+  const thinkingDiv = addMessage("", "ai", null, { persist: false, isThinking: true });
 
   try {
-    const response = await fetch(`/api/chat/${model}`, {
+    const body = {
+      message,
+      model,
+      temperature: modelParams.temperature,
+      maxTokens:   modelParams.maxTokens,
+      topP:        modelParams.topP,
+      systemPrompt,
+    };
+    if (imageToSend) {
+      body.imageBase64  = imageToSend.base64;
+      body.imageMimeType = imageToSend.mimeType;
+    }
+
+    const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, reset }),
+      body: JSON.stringify(body),
     });
+    const data = await readApiPayload(response);
 
-    const data = await response.json();
+    thinkingDiv.remove();
 
-    // Remove the "Thinking..." message
-    chatBox.lastChild.remove();
+    const replyContent = data.reply || data.error || `Request failed (${response.status})`;
+    addMessage(replyContent, "ai", currentMessages.length);
 
-    addMessage(data.reply, "ai");
-    
-    // Auto-save after each message
-    if (!reset) {
-      setTimeout(saveChat, 1000);
+    if (settings.autoSave && response.ok) {
+      setTimeout(() => { saveChat(); saveChatSettings(); }, 800);
     }
   } catch (error) {
-    chatBox.lastChild.remove();
-    addMessage("Error: Could not connect to the server", "ai");
+    thinkingDiv.remove();
+    addMessage("❌ Network error: Could not connect. Please check your connection.", "ai");
+  } finally {
+    setSending(false);
+    messageBox.focus();
   }
 }
 
-// Event listeners
-sendBtn.addEventListener("click", () => sendMessage());
-resetBtn.addEventListener("click", () => {
-  sendMessage(true);
-  newChatSession();
+/* ───────────────────────────────────────────────────────────────────
+   Clear memory (server-side)
+─────────────────────────────────────────────────────────────────── */
+async function clearMemory() {
+  const model = modelSelect.value;
+  if (!model) return;
+  if (!confirm("Clear AI memory for this model?")) return;
+
+  try {
+    await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "", reset: true, model }),
+    });
+    newChatSession();
+    showToast("Memory cleared");
+  } catch (err) {
+    console.error("Error clearing memory:", err);
+    showToast("Failed to clear memory");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Toast
+─────────────────────────────────────────────────────────────────── */
+function showToast(msg) {
+  let toast = document.getElementById("chatty-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "chatty-toast";
+    Object.assign(toast.style, {
+      position: "fixed", bottom: "80px", left: "50%",
+      transform: "translateX(-50%)",
+      background: "var(--bg-elevated)", color: "var(--text-primary)",
+      border: "1px solid var(--border)", borderRadius: "var(--radius-md)",
+      padding: "8px 18px", fontSize: "13px", zIndex: "9999",
+      pointerEvents: "none", opacity: "0",
+      transition: "opacity 0.2s ease",
+      fontFamily: "var(--font-sans)",
+      boxShadow: "var(--shadow-md)",
+    });
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = "1";
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => { toast.style.opacity = "0"; }, 2000);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Model list
+─────────────────────────────────────────────────────────────────── */
+// Tracks which models support vision (populated from API response)
+const visionModelIds = new Set();
+
+async function loadModelList() {
+  try {
+    const res = await fetch("/api/models");
+    const models = await res.json();
+    modelSelect.innerHTML = "";
+
+    if (!models.length) {
+      modelSelect.innerHTML = '<option value="">No models available</option>';
+      return;
+    }
+
+    models.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label;
+      if (m.vision) {
+        opt.dataset.vision = "true";
+        visionModelIds.add(m.id);
+      }
+      modelSelect.appendChild(opt);
+    });
+
+    updateVisionHint();
+  } catch (err) {
+    console.error("Failed to load models:", err);
+    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+  }
+}
+
+function updateVisionHint() {
+  const isVision = visionModelIds.has(modelSelect.value);
+  const uploadBtn = document.querySelector(".upload-btn");
+  if (uploadBtn) {
+    uploadBtn.title = isVision
+      ? "Attach image (supported by this model)"
+      : "Attach image (⚠ select a Vision model for image understanding)";
+    uploadBtn.style.opacity = isVision ? "1" : "0.6";
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Export helpers
+─────────────────────────────────────────────────────────────────── */
+function exportPlainText() {
+  if (!currentMessages.length) { showToast("Nothing to export"); return; }
+  let text = "";
+  currentMessages.forEach(msg => {
+    text += (msg.role === "user" ? "User" : "AI") + ": " + messageToText(msg) + "\n\n";
+  });
+  copyToClipboard(text, "Conversation copied");
+}
+
+function exportMarkdown() {
+  if (!currentMessages.length) { showToast("Nothing to export"); return; }
+  let md = `# ${chatTitle.textContent}\n\n**Model:** ${modelSelect.value}\n\n`;
+  currentMessages.forEach(msg => {
+    md += (msg.role === "user" ? "### User" : "### AI") + "\n\n" + messageToText(msg) + "\n\n---\n\n";
+  });
+  copyToClipboard(md, "Exported as Markdown");
+}
+
+function exportJSON() {
+  if (!currentMessages.length) { showToast("Nothing to export"); return; }
+  const json = JSON.stringify({
+    title: chatTitle.textContent,
+    model: modelSelect.value,
+    messages: currentMessages,
+    exportedAt: new Date().toISOString(),
+  }, null, 2);
+  copyToClipboard(json, "Exported as JSON");
+}
+
+function copyToClipboard(text, successMsg) {
+  navigator.clipboard.writeText(text)
+    .then(() => showToast(successMsg))
+    .catch(() => showToast("Copy failed — try manually"));
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Image message
+─────────────────────────────────────────────────────────────────── */
+function addImageMessage(prompt, base64, mimeType) {
+  const placeholder = chatBox.querySelector(".empty-state");
+  if (placeholder) placeholder.remove();
+
+  // User prompt bubble
+  addMessage(`🖼 Generate image: ${prompt}`, "user", currentMessages.length);
+
+  // AI image bubble
+  const messageDiv = document.createElement("div");
+  messageDiv.classList.add("message", "ai");
+
+  const avatar = document.createElement("div");
+  avatar.classList.add("message-avatar");
+  avatar.textContent = "AI";
+
+  const messageContent = document.createElement("div");
+  messageContent.classList.add("message-content", "image-message-content");
+
+  const img = document.createElement("img");
+  img.src = `data:${mimeType};base64,${base64}`;
+  img.classList.add("generated-image");
+  img.alt = prompt;
+  img.title = prompt;
+
+  // Download button
+  const downloadBtn = document.createElement("a");
+  downloadBtn.href = img.src;
+  downloadBtn.download = `chatty-image-${Date.now()}.png`;
+  downloadBtn.classList.add("image-download-btn");
+  downloadBtn.textContent = "↓ Download";
+
+  const caption = document.createElement("div");
+  caption.classList.add("image-caption");
+  caption.textContent = prompt;
+
+  messageContent.appendChild(img);
+  messageContent.appendChild(caption);
+  messageContent.appendChild(downloadBtn);
+  messageDiv.appendChild(avatar);
+  messageDiv.appendChild(messageContent);
+  chatBox.appendChild(messageDiv);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  // Store in conversation
+  currentMessages.push({ role: "assistant", content: `[Generated image: ${prompt}]` });
+  updateActionButtons();
+
+  if (settings.autoSave) setTimeout(() => saveChat(), 800);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Image generation
+─────────────────────────────────────────────────────────────────── */
+async function generateImage() {
+  const prompt = imagePromptInput.value.trim();
+  if (!prompt) { showToast("Enter a prompt first"); return; }
+
+  const sizeSelect = document.getElementById("imageSizeSelect");
+  const [width, height] = (sizeSelect ? sizeSelect.value : "1024x1024").split("x").map(Number);
+
+  imageGenModal.classList.add("hidden");
+  imagePromptInput.value = "";
+
+  const placeholder = chatBox.querySelector(".empty-state");
+  if (placeholder) placeholder.remove();
+
+  const thinkingDiv = addMessage("", "ai", null, { persist: false, isThinking: true });
+  const dotsLabel = document.createElement("span");
+  dotsLabel.style.cssText = "margin-left:8px;font-size:12px;color:var(--text-muted)";
+  dotsLabel.textContent = "Generating image…";
+  thinkingDiv.querySelector(".message-content").appendChild(dotsLabel);
+
+  try {
+    const res = await fetch("/api/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, width, height }),
+    });
+    const data = await res.json();
+    thinkingDiv.remove();
+
+    if (!res.ok || data.error) {
+      addMessage(`❌ ${data.error || "Image generation failed"}`, "ai");
+      return;
+    }
+
+    addImageMessage(prompt, data.imageBase64, data.mimeType || "image/png");
+  } catch (err) {
+    thinkingDiv.remove();
+    addMessage("❌ Network error during image generation", "ai");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Event listeners
+─────────────────────────────────────────────────────────────────── */
+sendBtn.addEventListener("click", sendMessage);
+
+// Image upload
+imageUploadInput.addEventListener("change", (e) => {
+  if (e.target.files[0]) handleImageUpload(e.target.files[0]);
 });
+
+// Drag and drop onto the chat input area
+const inputContainer = document.querySelector(".input-container");
+inputContainer.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  inputContainer.classList.add("drag-over");
+});
+inputContainer.addEventListener("dragleave", () => {
+  inputContainer.classList.remove("drag-over");
+});
+inputContainer.addEventListener("drop", (e) => {
+  e.preventDefault();
+  inputContainer.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) handleImageUpload(file);
+});
+
+// Paste image from clipboard
+messageBox.addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      handleImageUpload(item.getAsFile());
+      break;
+    }
+  }
+});
+
+// Image gen modal
+imageGenBtn.addEventListener("click", () => {
+  imageGenModal.classList.remove("hidden");
+  imagePromptInput.focus();
+});
+closeImageGenModal.addEventListener("click", () => imageGenModal.classList.add("hidden"));
+cancelImageGenBtn.addEventListener("click", () => imageGenModal.classList.add("hidden"));
+imageGenModal.addEventListener("click", (e) => { if (e.target === imageGenModal) imageGenModal.classList.add("hidden"); });
+confirmImageGenBtn.addEventListener("click", generateImage);
+imagePromptInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); generateImage(); }
+});
+
+messageBox.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+messageBox.addEventListener("input", function () {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 200) + "px";
+});
+
+systemPromptInput.addEventListener("input", function () {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 150) + "px";
+});
+
+resetBtn.addEventListener("click", clearMemory);
 newChatBtn.addEventListener("click", newChatSession);
 saveBtn.addEventListener("click", saveChat);
 
-// Rename chat
+searchInput.addEventListener("input", (e) => searchChats(e.target.value));
+
+temperatureSlider.addEventListener("input", updateSliderValues);
+maxTokensSlider.addEventListener("input", updateSliderValues);
+topPSlider.addEventListener("input", updateSliderValues);
+
+systemPromptInput.addEventListener("change", () => { systemPrompt = systemPromptInput.value; saveChatSettings(); });
+temperatureSlider.addEventListener("change", saveChatSettings);
+maxTokensSlider.addEventListener("change", saveChatSettings);
+topPSlider.addEventListener("change", saveChatSettings);
+
+// Share
+shareBtn.addEventListener("click", async () => {
+  if (!currentMessages.length) return;
+  const title = chatTitle.textContent;
+  const model = modelSelect.value;
+  try {
+    const res = await fetch("/api/share-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, model, messages: currentMessages }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      navigator.clipboard.writeText(data.url).catch(() => {});
+      showToast("Share link copied!");
+    }
+  } catch (err) {
+    showToast("Failed to create share link");
+  }
+});
+
+// Settings modal
+settingsBtn.addEventListener("click", () => settingsModal.classList.remove("hidden"));
+closeSettingsModal.addEventListener("click", () => settingsModal.classList.add("hidden"));
+closeSettingsBtn.addEventListener("click", () => settingsModal.classList.add("hidden"));
+settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
+
+settingTimestamps.addEventListener("change", () => { settings.showTimestamp = settingTimestamps.checked; saveSettings(); });
+settingAutoSave.addEventListener("change",   () => { settings.autoSave      = settingAutoSave.checked;   saveSettings(); });
+
+exportBtn.addEventListener("click", exportPlainText);
+exportMarkdownBtn.addEventListener("click", exportMarkdown);
+exportJsonBtn.addEventListener("click", exportJSON);
+
+// Rename
 renameBtn.addEventListener("click", () => {
   renameInput.value = chatTitle.textContent;
   renameModal.classList.remove("hidden");
   renameInput.focus();
+  renameInput.select();
 });
 
 confirmRenameBtn.addEventListener("click", async () => {
   const newTitle = renameInput.value.trim();
-  if (newTitle && currentChatId) {
+  if (newTitle) {
     chatTitle.textContent = newTitle;
-    currentMessages[0] = { ...currentMessages[0] };
-    await saveChat();
+    if (currentChatId) await saveChat();
   }
   renameModal.classList.add("hidden");
 });
 
-closeRenameModal.addEventListener("click", () => {
-  renameModal.classList.add("hidden");
+renameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); confirmRenameBtn.click(); }
+  if (e.key === "Escape") renameModal.classList.add("hidden");
 });
 
-cancelRenameBtn.addEventListener("click", () => {
-  renameModal.classList.add("hidden");
-});
+closeRenameModal.addEventListener("click", () => renameModal.classList.add("hidden"));
+cancelRenameBtn.addEventListener("click", () => renameModal.classList.add("hidden"));
+renameModal.addEventListener("click", (e) => { if (e.target === renameModal) renameModal.classList.add("hidden"); });
 
 // Logout
 logoutBtn.addEventListener("click", () => {
-  if (confirm("Are you sure you want to logout?")) {
-    window.location.href = "/login.html";
-  }
+  if (confirm("Log out?")) window.location.href = "/login.html";
 });
 
-messageBox.addEventListener("keypress", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+// New chat on model switch
+modelSelect.addEventListener("change", () => {
+  newChatSession();
+  updateVisionHint();
 });
 
-// Load chat history on page load
-loadChatHistory();
+/* ───────────────────────────────────────────────────────────────────
+   Init
+─────────────────────────────────────────────────────────────────── */
+updateActionButtons();
+loadModelList().then(loadChatHistory);
 </script>
-
 </body>
 </html>

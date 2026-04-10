@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shared Chat</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Shared Conversation</h2>
+      </div>
+      <div class="model-selector">
+        <select id="modelSelect" disabled></select>
+      </div>
+    </div>
+    <div class="main-content">
+      <div class="chat-header">
+        <div class="chat-title" id="chatTitle">Shared Chat</div>
+      </div>
+      <div id="chat-box">
+        <div class="empty-state">
+          <h3>Loading conversation...</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// shared viewer script - similar helpers to chat.html
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const parts = window.location.pathname.split('/');
+  const token = parts[parts.length - 1];
+  try {
+    const res = await fetch(`/api/shared/${token}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    chatTitle.textContent = data.title || 'Shared Chat';
+    modelSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.textContent = data.model || '';
+    modelSelect.appendChild(opt);
+
+    chatBox.innerHTML = '';
+    data.messages.forEach(msg => {
+      addMessage(msg.content || "", msg.role === 'user' ? 'user' : 'ai', msg.imageDataUrl || null);
+    });
+  } catch (err) {
+    console.error('Error loading shared chat:', err);
+    chatBox.innerHTML = '<div class="empty-state"><h3>Unable to load conversation</h3></div>';
+  }
+});
+
+// escape, markdownToHTML, addMessage reused from chat.html
+function escapeHTML(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function markdownToHTML(text) {
+  text = text.replace(/`([\s\S]*?)`/g, (match, code) => {
+    if (code.includes("\n")) {
+      return "```\n" + code + "\n```";
+    }
+    return match;
+  });
+  text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<pre class="code-block ${lang || ''}"><code>${escapeHTML(code)}</code></pre>`;
+  });
+  text = text.replace(/`([^`\n]+)`/g, (match, code) => {
+    return `<code class="inline-code">${escapeHTML(code)}</code>`;
+  });
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, title, url) => {
+    return `<a href="${escapeHTML(url)}" target="_blank" class="markdown-link">${escapeHTML(title)}</a>`;
+  });
+  text = text.replace(/\*\*\*([^\*]+)\*\*\*/g, "<b><i>$1</i></b>");
+  text = text.replace(/___([^_]+)___/g, "<b><i>$1</i></b>");
+  text = text.replace(/\*\*([^\*]+)\*\*/g, "<b>$1</b>");
+  text = text.replace(/__([^_]+)__/g, "<b>$1</b>");
+  text = text.replace(/\*([^\*]+)\*/g, "<i>$1</i>");
+  text = text.replace(/_([^_]+)_/g, "<i>$1</i>");
+  text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  text = text.replace(/(?:^|\n)([\s]*)[-*+]\s+(.+?)(?=\n|$)/gm, (match, indent, item) => {
+    return `<li class="markdown-list-item">${item}</li>`;
+  });
+  text = text.replace(/(<li class="markdown-list-item">.*?<\/li>)/s, (match) => {
+    return `<ul class="markdown-list">${match}</ul>`;
+  });
+  text = text.replace(/(?:^|\n)(\d+)\.\s+(.+?)(?=\n|$)/gm, (match, num, item) => {
+    return `<li class="markdown-list-item">${item}</li>`;
+  });
+  text = text.replace(/\n/g, "<br>");
+  return text;
+}
+
+function addMessage(content, sender, imageDataUrl = null) {
+  if (document.querySelector('.empty-state')) document.querySelector('.empty-state').remove();
+  const messageDiv = document.createElement("div");
+  messageDiv.classList.add("message", sender);
+  const avatar = document.createElement("div");
+  avatar.classList.add("message-avatar");
+  avatar.textContent = sender === "user" ? "U" : "AI";
+  const messageContent = document.createElement("div");
+  messageContent.classList.add("message-content");
+  if (typeof content === "string" && content.trim()) {
+    const textDiv = document.createElement("div");
+    textDiv.classList.add("message-text");
+    textDiv.innerHTML = markdownToHTML(content);
+    messageContent.appendChild(textDiv);
+  }
+  if (imageDataUrl) {
+    const img = document.createElement("img");
+    img.classList.add("message-image");
+    img.src = imageDataUrl;
+    img.alt = sender === "user" ? "Uploaded image" : "Generated image";
+    img.loading = "lazy";
+    messageContent.appendChild(img);
+  }
+  messageDiv.appendChild(avatar);
+  messageDiv.appendChild(messageContent);
+  document.getElementById("chat-box").appendChild(messageDiv);
+  document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+}
+</script>
+</body>
+</html>
