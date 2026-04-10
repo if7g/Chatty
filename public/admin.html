@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatty Admin</title>
+  <link rel="stylesheet" href="css/main.css">
+  <style>
+    body { overflow: auto; }
+
+    .admin-layout {
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+    }
+
+    /* Top bar */
+    .admin-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+    .admin-topbar-left { display: flex; align-items: center; gap: 14px; }
+    .admin-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+    .admin-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      background: var(--accent-glow-strong); color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 20px;
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .admin-topbar-right { display: flex; gap: 8px; }
+
+    /* Nav tabs */
+    .admin-nav {
+      display: flex;
+      gap: 2px;
+      padding: 0 28px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .admin-tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: var(--font-sans);
+    }
+    .admin-tab:hover { color: var(--text-primary); }
+    .admin-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Content */
+    .admin-content {
+      flex: 1;
+      padding: 28px;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Stat cards */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+    }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .stat-value { font-size: 30px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
+    .stat-card.accent .stat-value { color: var(--accent); }
+
+    /* Section heading */
+    .section-heading {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+      margin-top: 28px;
+    }
+    .section-heading:first-child { margin-top: 0; }
+
+    /* Table */
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .admin-table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .admin-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: var(--bg-elevated); }
+
+    .table-wrap {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+    .badge.green { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+    .badge.red   { background: rgba(239,68,68,0.12);  color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+    .badge.gray  { background: var(--bg-active); color: var(--text-muted); border: 1px solid var(--border); }
+
+    /* Action buttons in table */
+    .row-actions { display: flex; gap: 5px; }
+
+    .btn-xs {
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-family: var(--font-sans);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .btn-xs:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .btn-xs.danger:hover { background: var(--error-bg); color: var(--error-text); border-color: var(--error-border); }
+    .btn-xs.warn:hover { background: rgba(245,158,11,0.1); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
+    .btn-xs.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-xs.primary:hover { background: var(--accent-dim); }
+
+    /* User detail drawer */
+    .user-detail {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+      margin-top: 16px;
+    }
+    .user-detail h4 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--text-primary); }
+
+    /* Form elements */
+    .field-row { margin-bottom: 14px; }
+    .field-label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 5px; display: block; }
+    .field-input {
+      width: 100%;
+      max-width: 360px;
+      padding: 8px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field-input:focus { border-color: var(--accent); }
+
+    .empty-row { text-align: center; color: var(--text-muted); padding: 32px !important; }
+
+    /* Model list editor */
+    .model-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .model-row:last-child { border-bottom: none; }
+    .model-row-id { flex: 1; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+    .model-row-label { width: 200px; font-size: 12px; color: var(--text-secondary); }
+    .model-vision-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+
+    /* Add model form */
+    .add-model-form {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .add-model-form .field-input { max-width: 240px; }
+
+    /* Toast inside admin */
+    #adminToast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-elevated); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 9px 20px; font-size: 13px; z-index: 9999;
+      pointer-events: none; opacity: 0;
+      transition: opacity 0.2s ease;
+      font-family: var(--font-sans);
+      box-shadow: var(--shadow-md);
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+
+  <!-- Top bar -->
+  <div class="admin-topbar">
+    <div class="admin-topbar-left">
+      <div class="admin-logo">
+        <span class="sidebar-logo-dot"></span>
+        Chatty
+      </div>
+      <span class="admin-badge">Admin</span>
+    </div>
+    <div class="admin-topbar-right">
+      <a href="/chat" class="btn-xs">← Back to Chat</a>
+    </div>
+  </div>
+
+  <!-- Nav tabs -->
+  <div class="admin-nav">
+    <button class="admin-tab active" data-tab="overview">Overview</button>
+    <button class="admin-tab" data-tab="users">Users</button>
+    <button class="admin-tab" data-tab="models">Models</button>
+  </div>
+
+  <!-- Content -->
+  <div class="admin-content">
+
+    <!-- Overview tab -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="stat-grid">
+        <div class="stat-card accent">
+          <div class="stat-label">Active Users</div>
+          <div class="stat-value" id="stat-users">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Chats</div>
+          <div class="stat-value" id="stat-chats">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Banned Users</div>
+          <div class="stat-value" id="stat-banned">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users tab -->
+    <div class="tab-panel" id="tab-users">
+      <div class="section-heading">All Users</div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Status</th>
+              <th>Chats</th>
+              <th>Last Active</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr><td class="empty-row" colspan="6">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="userDetailPanel" class="user-detail" style="display:none">
+        <h4 id="userDetailTitle">User Details</h4>
+        <div class="field-row">
+          <label class="field-label">New Password</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="password" id="newPasswordInput" class="field-input" placeholder="Enter new password…" style="max-width:240px" />
+            <button class="btn-xs primary" onclick="resetPassword()">Set Password</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">Chats</label>
+          <div id="userChatsInfo" style="font-size:12.5px;color:var(--text-muted)"></div>
+          <button class="btn-xs danger" style="margin-top:8px" onclick="deleteUserChats()">Delete All Chats</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Models tab -->
+    <div class="tab-panel" id="tab-models">
+      <div class="section-heading">Available Models</div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px">
+        These are served to all users in the model dropdown. Changes apply immediately on next page load.
+      </p>
+      <div class="table-wrap">
+        <div id="modelsListWrap"></div>
+      </div>
+      <div class="add-model-form">
+        <div>
+          <label class="field-label">Model ID (NVIDIA NIM)</label>
+          <input type="text" id="newModelId" class="field-input" placeholder="e.g. meta/llama-3.1-8b-instruct" />
+        </div>
+        <div>
+          <label class="field-label">Display Label</label>
+          <input type="text" id="newModelLabel" class="field-input" placeholder="e.g. Llama 3.1 8B" />
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px;padding-bottom:0">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary);margin-bottom:0;cursor:pointer">
+            <input type="checkbox" id="newModelVision" style="accent-color:var(--accent)" /> Vision
+          </label>
+          <button class="btn-xs primary" onclick="addModel()">Add Model</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="adminToast"></div>
+
+<script>
+/* ── State ── */
+let selectedUserId = null;
+let localModels = [];  // editable copy of model list
+
+/* ── Tabs ── */
+document.querySelectorAll(".admin-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
+  });
+});
+
+/* ── Toast ── */
+function toast(msg, isError = false) {
+  const el = document.getElementById("adminToast");
+  el.textContent = msg;
+  el.style.color = isError ? "var(--error-text)" : "var(--text-primary)";
+  el.style.opacity = "1";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = "0"; }, 2500);
+}
+
+/* ── Stats ── */
+async function loadStats() {
+  const res = await fetch("/api/admin/stats");
+  const d = await res.json();
+  document.getElementById("stat-users").textContent  = d.users;
+  document.getElementById("stat-chats").textContent  = d.chats;
+  document.getElementById("stat-banned").textContent = d.banned;
+}
+
+/* ── Users ── */
+async function loadUsers() {
+  const res = await fetch("/api/admin/users");
+  const users = await res.json();
+  const tbody = document.getElementById("usersTableBody");
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td class="empty-row" colspan="6">No users found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">${u.id}</td>
+      <td style="font-weight:500">${esc(u.username)}</td>
+      <td>
+        ${u.banned
+          ? '<span class="badge red">Banned</span>'
+          : '<span class="badge green">Active</span>'}
+      </td>
+      <td style="font-family:var(--font-mono)">${u.chat_count}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${u.last_active ? new Date(u.last_active).toLocaleDateString() : "Never"}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn-xs" onclick="selectUser(${u.id}, '${esc(u.username)}')">Details</button>
+          <button class="btn-xs warn" onclick="toggleBan(${u.id}, ${u.banned ? 0 : 1}, '${esc(u.username)}')">
+            ${u.banned ? "Unban" : "Ban"}
+          </button>
+          <button class="btn-xs danger" onclick="deleteUser(${u.id}, '${esc(u.username)}')">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function toggleBan(id, ban, username) {
+  if (!confirm(`${ban ? "Ban" : "Unban"} user "${username}"?`)) return;
+  const res = await fetch(`/api/admin/users/${id}/ban`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ banned: ban }),
+  });
+  const d = await res.json();
+  if (d.ok) { toast(`User ${ban ? "banned" : "unbanned"}`); loadUsers(); loadStats(); }
+  else toast(d.error, true);
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Permanently delete user "${username}" and all their chats?`)) return;
+  const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+  const d = await res.json();
+  if (d.ok) { toast("User deleted"); loadUsers(); loadStats(); hideUserDetail(); }
+  else toast(d.error, true);
+}
+
+function selectUser(id, username) {
+  selectedUserId = id;
+  document.getElementById("userDetailTitle").textContent = `Details — ${username}`;
+  document.getElementById("newPasswordInput").value = "";
+  document.getElementById("userDetailPanel").style.display = "block";
+  loadUserChats(id);
+}
+
+function hideUserDetail() {
+  selectedUserId = null;
+  document.getElementById("userDetailPanel").style.display = "none";
+}
+
+async function loadUserChats(id) {
+  const res = await fetch(`/api/admin/chats/${id}`);
+  const chats = await res.json();
+  const el = document.getElementById("userChatsInfo");
+  el.textContent = chats.length ? `${chats.length} chats stored` : "No chats";
+}
+
+async function resetPassword() {
+  if (!selectedUserId) return;
+  const pw = document.getElementById("newPasswordInput").value.trim();
+  if (!pw) { toast("Enter a new password", true); return; }
+  const res = await fetch(`/api/admin/users/${selectedUserId}/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword: pw }),
+  });
+  const d = await res.json();
+  if (d.ok) { toast("Password updated"); document.getElementById("newPasswordInput").value = ""; }
+  else toast(d.error, true);
+}
+
+async function deleteUserChats() {
+  if (!selectedUserId) return;
+  if (!confirm("Delete ALL chats for this user?")) return;
+  const res = await fetch(`/api/admin/chats/${selectedUserId}`, { method: "DELETE" });
+  const d = await res.json();
+  if (d.ok) { toast(`Deleted ${d.deleted} chats`); loadUserChats(selectedUserId); loadStats(); }
+  else toast(d.error, true);
+}
+
+/* ── Models ── */
+async function loadModels() {
+  const res = await fetch("/api/models");
+  localModels = await res.json();
+  renderModels();
+}
+
+function renderModels() {
+  const wrap = document.getElementById("modelsListWrap");
+  if (!localModels.length) {
+    wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">No models configured</div>';
+    return;
+  }
+  wrap.innerHTML = localModels.map((m, i) => `
+    <div class="model-row">
+      <div class="model-row-id">${esc(m.id)}</div>
+      <div class="model-row-label">${esc(m.label)}</div>
+      <div class="model-vision-toggle">
+        <input type="checkbox" ${m.vision ? "checked" : ""} onchange="toggleVision(${i}, this.checked)" style="accent-color:var(--accent)" />
+        Vision
+      </div>
+      <button class="btn-xs danger" onclick="removeModel(${i})">Remove</button>
+    </div>
+  `).join("");
+}
+
+function toggleVision(idx, val) {
+  localModels[idx].vision = val;
+  saveModels();
+}
+
+function removeModel(idx) {
+  if (!confirm(`Remove model "${localModels[idx].label}"?`)) return;
+  localModels.splice(idx, 1);
+  renderModels();
+  saveModels();
+}
+
+function addModel() {
+  const id    = document.getElementById("newModelId").value.trim();
+  const label = document.getElementById("newModelLabel").value.trim();
+  const vision= document.getElementById("newModelVision").checked;
+  if (!id || !label) { toast("Fill in both ID and label", true); return; }
+  if (localModels.find(m => m.id === id)) { toast("Model already exists", true); return; }
+  localModels.push({ id, label, vision });
+  document.getElementById("newModelId").value = "";
+  document.getElementById("newModelLabel").value = "";
+  document.getElementById("newModelVision").checked = false;
+  renderModels();
+  saveModels();
+}
+
+async function saveModels() {
+  const res = await fetch("/api/admin/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ models: localModels }),
+  });
+  const d = await res.json();
+  if (d.ok) toast("Models saved");
+  else toast(d.error || "Save failed", true);
+}
+
+/* ── Util ── */
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ── Init ── */
+loadStats();
+loadUsers();
+loadModels();
+</script>
+</body>
+</html>

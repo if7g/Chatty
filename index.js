@@ -4,9 +4,24 @@ import OpenAI from "openai";
 import sqlite3pkg from "sqlite3";
 import bcrypt from "bcrypt";
 import session from "express-session";
+import https from "https";
+import http from "http";
+import fs from "fs";
 
 const sqlite3 = sqlite3pkg.verbose();
 const serverApp = express();
+
+// Read TLS cert early so we can use it in session config
+const certPath = "/etc/letsencrypt/live/chatty.asteroid.ink";
+let tlsOptions = null;
+try {
+    tlsOptions = {
+        cert: fs.readFileSync(`${certPath}/fullchain.pem`),
+        key:  fs.readFileSync(`${certPath}/privkey.pem`),
+    };
+} catch (err) {
+    console.warn("⚠️  TLS cert not found — falling back to HTTP only:", err.message);
+}
 
 // ----------------------
 // MIDDLEWARE
@@ -21,7 +36,7 @@ serverApp.use(
         secret: "chattyisdabest1234",
         resave: false,
         saveUninitialized: false,
-        cookie: { secure: false },
+        cookie: { secure: !!tlsOptions },
     })
 );
 
@@ -113,6 +128,37 @@ db.run(`
     )
 `);
 
+// user preferences (theme, accent, font size, etc)
+db.run(`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id INTEGER PRIMARY KEY,
+        accent_color TEXT DEFAULT '#7c6cf8',
+        font_size TEXT DEFAULT 'md',
+        bubble_style TEXT DEFAULT 'rounded',
+        ai_name TEXT DEFAULT 'AI',
+        sidebar_width INTEGER DEFAULT 252,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+`);
+
+// add banned column to users if not present (migration-safe)
+db.run(`ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`, () => {});
+
+// ----------------------
+// ADMIN GUARD
+// ----------------------
+const ADMIN_USERNAME = "rvnaw4y";
+
+function requireAdmin(req, res, next) {
+    if (!req.session.user || req.session.user.username !== ADMIN_USERNAME) {
+        if ((req.originalUrl || "").startsWith("/api/")) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+        return res.redirect("/chat");
+    }
+    next();
+}
+
 // ----------------------
 // ROUTES
 // ----------------------
@@ -157,6 +203,8 @@ serverApp.post("/login", (req, res) => {
 
             const match = await bcrypt.compare(password, row.password);
             if (!match) return res.send("Invalid password");
+
+            if (row.banned) return res.send("Your account has been suspended. Contact the administrator.");
 
             req.session.user = { id: row.id, username: row.username };
             res.redirect("/chat");
@@ -319,8 +367,17 @@ serverApp.post("/api/chat", requireLogin, async (req, res) => {
 // ----------------------
 
 serverApp.get("/api/models", requireLogin, (req, res) => {
-    // Return curated NVIDIA NIM free models with metadata
-    res.json(NVIDIA_MODELS);
+    // Check if admin has saved a custom model list
+    db.get(`SELECT accent_color FROM user_preferences WHERE user_id = -999`, [], (err, row) => {
+        if (!err && row && row.accent_color) {
+            try {
+                const models = JSON.parse(row.accent_color);
+                return res.json(models);
+            } catch {}
+        }
+        // Fall back to hardcoded curated list
+        res.json(NVIDIA_MODELS);
+    });
 });
 
 // ----------------------
@@ -692,6 +749,167 @@ serverApp.post("/api/generate-image", requireLogin, async (req, res) => {
     }
 });
 
+// Admin model list override (stored in DB as a special row)
+serverApp.post("/api/admin/models", requireAdmin, (req, res) => {
+    const { models } = req.body;
+    if (!Array.isArray(models)) return res.status(400).json({ error: "Invalid models array" });
+    // Store as JSON in a dedicated table row keyed by user_id = -999
+    db.run(`
+        INSERT INTO user_preferences (user_id, accent_color)
+        VALUES (-999, ?)
+        ON CONFLICT(user_id) DO UPDATE SET accent_color = excluded.accent_color
+    `, [JSON.stringify(models)], (err) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// ----------------------
+// USER PREFERENCES
+// ----------------------
+
+serverApp.get("/api/preferences", requireLogin, (req, res) => {
+    const userId = req.session.user.id;
+    db.get(`SELECT * FROM user_preferences WHERE user_id = ?`, [userId], (err, row) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json(row || { accent_color: "#7c6cf8", font_size: "md", bubble_style: "rounded", ai_name: "AI", sidebar_width: 252 });
+    });
+});
+
+serverApp.post("/api/preferences", requireLogin, (req, res) => {
+    const userId = req.session.user.id;
+    const { accent_color, font_size, bubble_style, ai_name, sidebar_width } = req.body;
+    db.run(`
+        INSERT INTO user_preferences (user_id, accent_color, font_size, bubble_style, ai_name, sidebar_width)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            accent_color = excluded.accent_color,
+            font_size    = excluded.font_size,
+            bubble_style = excluded.bubble_style,
+            ai_name      = excluded.ai_name,
+            sidebar_width= excluded.sidebar_width
+    `, [userId, accent_color || "#7c6cf8", font_size || "md", bubble_style || "rounded", ai_name || "AI", sidebar_width || 252],
+    (err) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// Who am I?
+serverApp.get("/api/me", requireLogin, (req, res) => {
+    res.json({
+        id: req.session.user.id,
+        username: req.session.user.username,
+        isAdmin: req.session.user.username === ADMIN_USERNAME,
+    });
+});
+
+// ----------------------
+// ADMIN ROUTES
+// ----------------------
+
+serverApp.get("/admin", requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+// Stats
+serverApp.get("/api/admin/stats", requireAdmin, (req, res) => {
+    db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 0 OR banned IS NULL`, [], (err, users) => {
+        db.get(`SELECT COUNT(*) as total FROM chat_conversations`, [], (err2, chats) => {
+            db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 1`, [], (err3, banned) => {
+                res.json({
+                    users:   users?.total  || 0,
+                    chats:   chats?.total  || 0,
+                    banned:  banned?.total || 0,
+                });
+            });
+        });
+    });
+});
+
+// List users
+serverApp.get("/api/admin/users", requireAdmin, (req, res) => {
+    db.all(`
+        SELECT u.id, u.username, u.banned,
+               COUNT(c.id) as chat_count,
+               MAX(c.updated_at) as last_active
+        FROM users u
+        LEFT JOIN chat_conversations c ON c.user_id = u.id
+        GROUP BY u.id
+        ORDER BY u.id ASC
+    `, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json(rows || []);
+    });
+});
+
+// Delete user
+serverApp.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
+    const { id } = req.params;
+    if (String(id) === String(req.session.user.id)) {
+        return res.status(400).json({ error: "Cannot delete yourself" });
+    }
+    db.run(`DELETE FROM chat_conversations WHERE user_id = ?`, [id], () => {
+        db.run(`DELETE FROM users WHERE id = ?`, [id], function(err) {
+            if (err) return res.status(500).json({ error: "DB error" });
+            res.json({ ok: true });
+        });
+    });
+});
+
+// Ban / unban user
+serverApp.post("/api/admin/users/:id/ban", requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const { banned } = req.body;
+    if (String(id) === String(req.session.user.id)) {
+        return res.status(400).json({ error: "Cannot ban yourself" });
+    }
+    db.run(`UPDATE users SET banned = ? WHERE id = ?`, [banned ? 1 : 0, id], function(err) {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// Reset a user's password
+serverApp.post("/api/admin/users/:id/reset-password", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4) {
+        return res.status(400).json({ error: "Password too short" });
+    }
+    const hashed = await bcrypt.hash(newPassword, 10);
+    db.run(`UPDATE users SET password = ? WHERE id = ?`, [hashed, id], function(err) {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// Get/set site-wide system prompt override
+serverApp.get("/api/admin/site-settings", requireAdmin, (req, res) => {
+    db.get(`SELECT value FROM user_preferences WHERE user_id = -1`, [], (err, row) => {
+        // We store site settings with user_id = -1 as a convention
+        res.json({ systemPromptOverride: row?.value || "" });
+    });
+});
+
+// Broadcast message to a user (stored as a chat message from system)
+serverApp.get("/api/admin/chats/:userId", requireAdmin, (req, res) => {
+    const { userId } = req.params;
+    db.all(`SELECT id, title, model, updated_at FROM chat_conversations WHERE user_id = ? ORDER BY updated_at DESC`, [userId], (err, rows) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json(rows || []);
+    });
+});
+
+// Delete all chats for a user
+serverApp.delete("/api/admin/chats/:userId", requireAdmin, (req, res) => {
+    const { userId } = req.params;
+    db.run(`DELETE FROM chat_conversations WHERE user_id = ?`, [userId], function(err) {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true, deleted: this.changes });
+    });
+});
+
 // ----------------------
 // WILDCARD ROUTE (MOVED TO END)
 // ----------------------
@@ -707,16 +925,33 @@ serverApp.get("/:page", (req, res, next) => {
 // ----------------------
 // SERVER START
 // ----------------------
-const PORT = process.env.PORT || 3000;
-const httpServer = serverApp.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+const HTTP_PORT  = process.env.HTTP_PORT  || 80;
+const HTTPS_PORT = process.env.HTTPS_PORT || 443;
 
-httpServer.on("error", (err) => {
-    console.error("Server failed to stay up:", err);
-    process.exit(1);
-});
+if (tlsOptions) {
+    // HTTPS server
+    const httpsServer = https.createServer(tlsOptions, serverApp);
+    httpsServer.listen(HTTPS_PORT, () => {
+        console.log(`🔒 HTTPS server running at https://chatty.asteroid.ink:${HTTPS_PORT}`);
+    });
+    httpsServer.on("error", (err) => { console.error("HTTPS server error:", err); process.exit(1); });
 
-httpServer.on("close", () => {
-    console.log("HTTP server closed.");
-});
+    // HTTP → HTTPS redirect
+    const redirectApp = express();
+    redirectApp.use((req, res) => {
+        res.redirect(301, `https://${req.headers.host}${req.url}`);
+    });
+    const httpServer = http.createServer(redirectApp);
+    httpServer.listen(HTTP_PORT, () => {
+        console.log(`↪️  HTTP redirect running on port ${HTTP_PORT}`);
+    });
+    httpServer.on("error", (err) => { console.error("HTTP redirect error:", err); });
+} else {
+    // No cert — plain HTTP fallback
+    const PORT = process.env.PORT || 3000;
+    const httpServer = http.createServer(serverApp);
+    httpServer.listen(PORT, () => {
+        console.log(`🚀 Server running at http://localhost:${PORT}`);
+    });
+    httpServer.on("error", (err) => { console.error("Server error:", err); process.exit(1); });
+}
