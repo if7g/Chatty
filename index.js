@@ -651,7 +651,7 @@ serverApp.delete("/api/chat/:chatId", requireLogin, (req, res) => {
 // serve the shared chat page (no login required)
 serverApp.get("/shared/:token", (req, res) => {
     sendWithSEO(res, path.join(__dirname, "public", "shared.html"), "/shared", null,
-        { popunder: true, bannerTop: true });
+        { popunder: true, bannerTop: true, bannerBottom: true });
 });
 
 // create a public share link for a chat

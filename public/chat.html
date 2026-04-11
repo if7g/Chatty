@@ -7,7 +7,7 @@
   <meta name="description" content="Your AI chat session on Chatty. Switch between models, generate images, and save your conversations." />
   <meta name="keywords" content="AI chat, Llama chat, free AI assistant" />
   <meta name="robots" content="noindex, nofollow" />
-  <link rel="canonical" href="https://chatty.mk/chat" />
+  <link rel="canonical" href="https://chatty.asteroid.ink/chat" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
@@ -15,13 +15,13 @@
   <meta property="og:title" content="Chatty AI Chat" />
   <meta property="og:description" content="Chat with multiple AI models for free." />
   <meta property="og:url" content="https://chatty.asteroid.ink/chat" />
-  <meta property="og:image" content="https://chatty.mk/img/og-image.png" />
+  <meta property="og:image" content="https://chatty.asteroid.ink/img/og-image.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Chatty AI Chat" />
   <meta name="twitter:description" content="Chat with multiple AI models for free." />
-  <meta name="twitter:image" content="https://chatty.mk/img/og-image.png" />
+  <meta name="twitter:image" content="https://chatty.asteroid.ink/img/og-image.png" />
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
@@ -807,6 +807,7 @@ async function loadChat(chatId) {
     await loadChatSettings();
     updateActionButtons();
     loadChatHistory(); // refresh sidebar active state
+    if (window.innerWidth <= 700) closeSidebar();
   } catch (err) {
     console.error("Error loading chat:", err);
     showToast("Error loading chat");
@@ -1299,13 +1300,6 @@ menuBtn.addEventListener("click", () => {
   sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
 });
 sidebarOverlay.addEventListener("click", closeSidebar);
-
-// Close sidebar when a chat is loaded on mobile
-const origLoadChat = loadChat;
-async function loadChat(chatId) {
-  await origLoadChat(chatId);
-  if (window.innerWidth <= 700) closeSidebar();
-}
 
 // Image upload
 imageUploadInput.addEventListener("change", (e) => {
