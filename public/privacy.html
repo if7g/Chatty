@@ -8,6 +8,8 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400;500;600;700&display=swap');
         body{font-family:'JetBrains Mono',monospace;background:#0b0b0c;color:#e6e6e6}
+        h3{color:#fff}
+        p, li{line-height:1.75}
     </style>
 </head>
 <body>
@@ -15,31 +17,90 @@
     <div class="max-w-7xl mx-auto flex items-center justify-between">
       <h1 class="text-2xl font-bold">Chatty</h1>
       <nav class="space-x-4">
-        <a href="/" class="text-sm text-gray-300">Home</a>
+        <a href="/" class="text-sm text-gray-300 hover:text-white">Home</a>
       </nav>
     </div>
   </header>
 
   <main class="max-w-4xl mx-auto p-8">
-    <h2 class="text-3xl font-semibold mb-4">Privacy Policy</h2>
-    <p class="text-gray-400 mb-6">Last updated: January 21, 2026</p>
+    <h2 class="text-3xl font-semibold mb-2">Privacy Policy</h2>
+    <p class="text-gray-500 mb-8">Last updated: April 11, 2026</p>
 
-    <section class="mb-6">
-      <h3 class="font-semibold mb-2">1. Information Collected</h3>
-      <p class="text-gray-300">We may collect data you provide (for example account username). We do not sell personal data.</p>
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">1. Introduction</h3>
+      <p class="text-gray-300">This Privacy Policy describes how Chatty ("we", "us", or "our") collects, uses, and handles your information when you use our Service. By using Chatty, you agree to the collection and use of information in accordance with this policy.</p>
     </section>
 
-    <section class="mb-6">
-      <h3 class="font-semibold mb-2">2. Third-Party Services</h3>
-      <p class="text-gray-300">Third-party APIs (like OpenRouter) may process data according to their policies.</p>
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">2. Information We Collect</h3>
+      <p class="text-gray-300 mb-3">We collect the following types of information:</p>
+      <ul class="list-disc ml-6 text-gray-300 space-y-2">
+        <li><span class="text-white font-medium">Account information:</span> When you register, we collect your username and a hashed version of your password. We do not collect your real name or email address unless you provide one.</li>
+        <li><span class="text-white font-medium">Chat data:</span> Messages and conversations you submit through the Service are stored to provide chat history functionality.</li>
+        <li><span class="text-white font-medium">Usage data:</span> We may collect basic technical information such as your browser type, IP address, and pages visited, used solely for maintaining and improving the Service.</li>
+      </ul>
     </section>
 
-    <section class="mb-6">
-      <h3 class="font-semibold mb-2">3. Cookies & Tracking</h3>
-      <p class="text-gray-300">This demo uses minimal client-side features and does not set tracking cookies by default.</p>
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">3. How We Use Your Information</h3>
+      <p class="text-gray-300 mb-3">We use the information we collect to:</p>
+      <ul class="list-disc ml-6 text-gray-300 space-y-1">
+        <li>Provide, operate, and maintain the Service.</li>
+        <li>Authenticate your account and keep it secure.</li>
+        <li>Display your chat history within the Service.</li>
+        <li>Monitor and analyze usage to improve performance and reliability.</li>
+        <li>Detect and prevent misuse or violations of our Terms of Service.</li>
+      </ul>
+      <p class="text-gray-300 mt-3">We do not sell, rent, or trade your personal information to any third party.</p>
     </section>
 
-    <p class="text-gray-500 mt-8">This Privacy Policy is a template. Customize for production use and compliance.</p>
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">4. Third-Party Services — NVIDIA AI API</h3>
+      <p class="text-gray-300">Chat messages you send are transmitted to the NVIDIA AI API to generate responses. This means your prompts are processed by NVIDIA's infrastructure. We encourage you to review <a href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/" target="_blank" class="text-blue-400 hover:underline">NVIDIA's Privacy Policy</a> to understand how they handle data. We do not control NVIDIA's data practices and are not responsible for them.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">5. Data Retention</h3>
+      <p class="text-gray-300">We retain your account data and chat history for as long as your account is active or as needed to provide the Service. If you wish to delete your account or your data, please contact us through the Service. We will make reasonable efforts to remove your data upon request.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">6. Cookies & Local Storage</h3>
+      <p class="text-gray-300">Chatty may use session cookies or local storage to maintain your login session and preferences. We do not use tracking cookies, advertising cookies, or any analytics platforms that profile your behavior across other websites.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">7. Security</h3>
+      <p class="text-gray-300">We take reasonable measures to protect your data, including hashing passwords before storage. However, no method of transmission over the internet or electronic storage is 100% secure. We cannot guarantee absolute security and encourage you to use a strong, unique password.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">8. Children's Privacy</h3>
+      <p class="text-gray-300">The Service is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us and we will take steps to remove it.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">9. Your Rights</h3>
+      <p class="text-gray-300 mb-3">Depending on your location, you may have the right to:</p>
+      <ul class="list-disc ml-6 text-gray-300 space-y-1">
+        <li>Access the personal data we hold about you.</li>
+        <li>Request correction of inaccurate data.</li>
+        <li>Request deletion of your data.</li>
+        <li>Object to or restrict certain processing of your data.</li>
+      </ul>
+      <p class="text-gray-300 mt-3">To exercise these rights, please contact us through the Service.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">10. Changes to This Policy</h3>
+      <p class="text-gray-300">We may update this Privacy Policy from time to time. Changes will be reflected on this page with an updated date. Continued use of the Service after changes are posted constitutes your acceptance of the revised policy.</p>
+    </section>
+
+    <section class="mb-8">
+      <h3 class="font-semibold text-lg mb-3">11. Contact</h3>
+      <p class="text-gray-300">If you have any questions or concerns about this Privacy Policy, please reach out to us through the Service.</p>
+    </section>
+
   </main>
 
   <footer class="p-6 bg-[#151515] text-gray-400 text-sm mt-12">

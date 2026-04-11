@@ -160,17 +160,144 @@ function requireAdmin(req, res, next) {
 }
 
 // ----------------------
+// SEO — meta tag injection
+// ----------------------
+
+const SITE_URL    = "https://chatty.mk";
+const SITE_NAME   = "Chatty";
+const DEFAULT_IMG = `${SITE_URL}/img/og-image.png`;
+
+const PAGE_META = {
+    "/": {
+        title:       "Chatty — Free AI Chat with Multiple Models",
+        description: "Chat with Llama, Mistral, Gemma, DeepSeek and more for free. Chatty is a fast, private AI chat app powered by NVIDIA NIM.",
+        keywords:    "free AI chat, Llama AI, Mistral AI, NVIDIA NIM, AI chatbot, free chatbot, multi-model AI, chatty.mk",
+        canonical:   `${SITE_URL}/`,
+        index:       true,
+        jsonld: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            name: SITE_NAME,
+            url: SITE_URL,
+            description: "Free multi-model AI chat app powered by NVIDIA NIM.",
+            applicationCategory: "Artificial Intelligence",
+            operatingSystem: "Any",
+            offers: { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            featureList: ["Multiple AI models", "AI image generation", "Chat history", "Shareable conversations", "Free to use"],
+        }),
+    },
+    "/signup": {
+        title:       "Sign Up Free — Chatty",
+        description: "Create a free Chatty account and start chatting with multiple AI models instantly. No credit card required.",
+        keywords:    "sign up free AI, free AI account, Chatty signup, chatty.mk",
+        canonical:   `${SITE_URL}/signup`,
+        index:       true,
+    },
+    "/login": {
+        title:       "Log In — Chatty",
+        description: "Sign in to Chatty and start chatting with free AI models including Llama, Mistral, and more.",
+        canonical:   `${SITE_URL}/login`,
+        index:       false,
+    },
+    "/chat": {
+        title:       "Chat — Chatty",
+        description: "Your AI chat session on Chatty.",
+        canonical:   `${SITE_URL}/chat`,
+        index:       false,
+    },
+    "/privacy": {
+        title:       "Privacy Policy — Chatty",
+        description: "Read Chatty's privacy policy. We respect your data and keep your conversations private.",
+        canonical:   `${SITE_URL}/privacy`,
+        index:       true,
+    },
+    "/tos": {
+        title:       "Terms of Service — Chatty",
+        description: "Read the terms of service for Chatty, the free multi-model AI chat platform.",
+        canonical:   `${SITE_URL}/tos`,
+        index:       true,
+    },
+    "/credits": {
+        title:       "Credits — Chatty",
+        description: "Credits and acknowledgements for Chatty, powered by NVIDIA NIM and open-source AI models.",
+        canonical:   `${SITE_URL}/credits`,
+        index:       true,
+    },
+    "/shared": {
+        title:       "Shared Conversation — Chatty",
+        description: "View a shared AI conversation from Chatty.",
+        canonical:   `${SITE_URL}/shared`,
+        index:       true,
+    },
+    "/admin": {
+        title:       "Admin — Chatty",
+        description: "Chatty admin panel.",
+        canonical:   `${SITE_URL}/admin`,
+        index:       false,
+    },
+};
+
+function buildMetaTags(route, extraTitle) {
+    const m = PAGE_META[route] || {
+        title: `${SITE_NAME}`,
+        description: "Free AI chat powered by NVIDIA NIM.",
+        canonical: `${SITE_URL}${route}`,
+        index: false,
+    };
+    const title = extraTitle || m.title;
+    const robots = m.index ? "index, follow" : "noindex, nofollow";
+    const kw = m.keywords ? `\n  <meta name="keywords" content="${m.keywords}" />` : "";
+    const ld = m.jsonld ? `\n  <script type="application/ld+json">${m.jsonld}</script>` : "";
+
+    return `<title>${title}</title>
+  <meta name="description" content="${m.description}" />${kw}
+  <meta name="robots" content="${robots}" />
+  <link rel="canonical" href="${m.canonical}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${SITE_NAME}" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${m.description}" />
+  <meta property="og:url" content="${m.canonical}" />
+  <meta property="og:image" content="${DEFAULT_IMG}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${m.description}" />
+  <meta name="twitter:image" content="${DEFAULT_IMG}" />${ld}`;
+}
+
+// Read a file, inject meta tags, send it
+function sendWithSEO(res, filePath, route, extraTitle) {
+    fs.readFile(filePath, "utf8", (err, html) => {
+        if (err) return res.status(404).send("Not found");
+        // Replace existing <title>...</title> + anything we injected before
+        html = html.replace(/<title>[\s\S]*?<\/title>/, "");
+        // Strip any previously injected meta blocks
+        html = html.replace(/\s*<meta name="description"[^>]*>/g, "");
+        html = html.replace(/\s*<meta name="keywords"[^>]*>/g, "");
+        html = html.replace(/\s*<meta name="robots"[^>]*>/g, "");
+        html = html.replace(/\s*<link rel="canonical"[^>]*>/g, "");
+        html = html.replace(/\s*<meta property="og:[^"]*"[^>]*>/g, "");
+        html = html.replace(/\s*<meta name="twitter:[^"]*"[^>]*>/g, "");
+        html = html.replace(/\s*<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");
+        // Inject after <head>
+        html = html.replace("<head>", `<head>\n  ${buildMetaTags(route, extraTitle)}`);
+        res.setHeader("Content-Type", "text/html");
+        res.send(html);
+    });
+}
+
+// ----------------------
 // ROUTES
 // ----------------------
 
 // Home
 serverApp.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+    sendWithSEO(res, path.join(__dirname, "public", "index.html"), "/");
 });
 
 // Chat (PROTECTED)
 serverApp.get("/chat", requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "chat.html"));
+    sendWithSEO(res, path.join(__dirname, "public", "chat.html"), "/chat");
 });
 
 // Signup
@@ -482,7 +609,7 @@ serverApp.delete("/api/chat/:chatId", requireLogin, (req, res) => {
 
 // serve the shared chat page (no login required)
 serverApp.get("/shared/:token", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "shared.html"));
+    sendWithSEO(res, path.join(__dirname, "public", "shared.html"), "/shared");
 });
 
 // create a public share link for a chat
@@ -809,7 +936,7 @@ serverApp.get("/api/me", requireLogin, (req, res) => {
 // ----------------------
 
 serverApp.get("/admin", requireAdmin, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "admin.html"));
+    sendWithSEO(res, path.join(__dirname, "public", "admin.html"), "/admin");
 });
 
 // Stats
@@ -911,14 +1038,56 @@ serverApp.delete("/api/admin/chats/:userId", requireAdmin, (req, res) => {
 });
 
 // ----------------------
+// SEO FILES
+// ----------------------
+
+serverApp.get("/robots.txt", (req, res) => {
+    res.setHeader("Content-Type", "text/plain");
+    res.send(`User-agent: *
+Allow: /
+Allow: /signup
+Allow: /privacy
+Allow: /tos
+Allow: /credits
+Allow: /shared/
+
+Disallow: /admin
+Disallow: /chat
+Disallow: /login
+Disallow: /api/
+
+Sitemap: ${SITE_URL}/sitemap.xml`);
+});
+
+serverApp.get("/sitemap.xml", (req, res) => {
+    const pages = [
+        { loc: "/",        priority: "1.0", freq: "weekly"  },
+        { loc: "/signup",  priority: "0.9", freq: "monthly" },
+        { loc: "/privacy", priority: "0.3", freq: "yearly"  },
+        { loc: "/tos",     priority: "0.3", freq: "yearly"  },
+        { loc: "/credits", priority: "0.2", freq: "monthly" },
+    ];
+    const urls = pages.map(p => `
+  <url>
+    <loc>${SITE_URL}${p.loc}</loc>
+    <changefreq>${p.freq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join("");
+    res.setHeader("Content-Type", "application/xml");
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}\n</urlset>`);
+});
+
+// ----------------------
 // WILDCARD ROUTE (MOVED TO END)
 // ----------------------
 serverApp.get("/:page", (req, res, next) => {
-    let page = req.params.page;
-    let filePath = path.join(__dirname, "public", `${page}.html`);
-
-    res.sendFile(filePath, (err) => {
-        if (err) next();
+    const page = req.params.page;
+    const filePath = path.join(__dirname, "public", `${page}.html`);
+    const route = `/${page}`;
+    // Only inject SEO if the file exists
+    fs.access(filePath, fs.constants.R_OK, (err) => {
+        if (err) return next();
+        sendWithSEO(res, filePath, route);
     });
 });
 
