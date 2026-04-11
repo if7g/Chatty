@@ -607,16 +607,38 @@ async function loadChatHistory() {
       chatItem.classList.add("chat-item");
       if (chat.id === currentChatId) chatItem.classList.add("active");
 
-      chatItem.innerHTML = `
-        <div class="chat-item-text">
-          <div class="chat-item-title">${escapeHTML(chat.title || "Untitled")}</div>
-          <div class="chat-item-meta">${escapeHTML(chat.model || "")} · ${new Date(chat.updated_at).toLocaleDateString()}</div>
-        </div>
-        <div class="chat-item-actions">
-          <button class="action-btn" title="Load" onclick="event.stopPropagation(); loadChat(${chat.id})">📂</button>
-          <button class="action-btn delete" title="Delete" onclick="event.stopPropagation(); deleteChat(${chat.id})">🗑</button>
-        </div>
-      `;
+      const textWrap = document.createElement("div");
+      textWrap.className = "chat-item-text";
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "chat-item-title";
+      titleEl.textContent = chat.title || "Untitled";
+
+      const metaEl = document.createElement("div");
+      metaEl.className = "chat-item-meta";
+      metaEl.textContent = `${chat.model || ""} · ${new Date(chat.updated_at).toLocaleDateString()}`;
+
+      const actionsEl = document.createElement("div");
+      actionsEl.className = "chat-item-actions";
+
+      const loadBtn = document.createElement("button");
+      loadBtn.className = "action-btn";
+      loadBtn.title = "Load";
+      loadBtn.textContent = "📂";
+      loadBtn.addEventListener("click", (e) => { e.stopPropagation(); loadChat(chat.id); });
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "action-btn delete";
+      delBtn.title = "Delete";
+      delBtn.textContent = "🗑";
+      delBtn.addEventListener("click", (e) => { e.stopPropagation(); deleteChat(chat.id); });
+
+      actionsEl.appendChild(loadBtn);
+      actionsEl.appendChild(delBtn);
+      textWrap.appendChild(titleEl);
+      textWrap.appendChild(metaEl);
+      chatItem.appendChild(textWrap);
+      chatItem.appendChild(actionsEl);
       chatItem.addEventListener("click", () => loadChat(chat.id));
       chatHistory.appendChild(chatItem);
     });
@@ -647,10 +669,17 @@ async function searchChats(query) {
     results.forEach(chat => {
       const item = document.createElement("div");
       item.classList.add("search-result-item");
-      item.innerHTML = `
-        <div class="search-result-title">${escapeHTML(chat.title || "Untitled")}</div>
-        <div class="search-result-meta">${escapeHTML(chat.model || "")}</div>
-      `;
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "search-result-title";
+      titleEl.textContent = chat.title || "Untitled";
+
+      const metaEl = document.createElement("div");
+      metaEl.className = "search-result-meta";
+      metaEl.textContent = chat.model || "";
+
+      item.appendChild(titleEl);
+      item.appendChild(metaEl);
       item.onclick = () => {
         loadChat(chat.id);
         searchResults.classList.add("hidden");
@@ -982,7 +1011,8 @@ async function sendMessage() {
     if (message) {
       const textDiv = document.createElement("div");
       textDiv.classList.add("message-text");
-      textDiv.innerHTML = inlineFormat(message);
+      // User input is always plain text — never parse as markdown
+      textDiv.textContent = message;
       messageContent.appendChild(textDiv);
     }
 
@@ -1439,7 +1469,13 @@ renameModal.addEventListener("click", (e) => { if (e.target === renameModal) ren
 
 // Logout
 logoutBtn.addEventListener("click", () => {
-  if (confirm("Log out?")) window.location.href = "/login.html";
+  if (confirm("Log out?")) {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/logout";
+    document.body.appendChild(form);
+    form.submit();
+  }
 });
 
 // New chat on model switch

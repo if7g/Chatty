@@ -7,12 +7,15 @@ import session from "express-session";
 import https from "https";
 import http from "http";
 import fs from "fs";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import crypto from "crypto";
 
 const sqlite3 = sqlite3pkg.verbose();
 const serverApp = express();
 
 // Read TLS cert early so we can use it in session config
-const certPath = "/etc/letsencrypt/live/chatty.asteroid.ink";
+const certPath = "/etc/letsencrypt/live/chatty.mk";
 let tlsOptions = null;
 try {
     tlsOptions = {
@@ -23,26 +26,159 @@ try {
     console.warn("⚠️  TLS cert not found — falling back to HTTP only:", err.message);
 }
 
-// ----------------------
-// MIDDLEWARE
-// ----------------------
-serverApp.use(express.urlencoded({ extended: true, limit: "15mb" }));
-serverApp.use(express.json({ limit: "15mb" }));
+// ──────────────────────────────────────────────────────────────────
+// SECURITY MIDDLEWARE  (OWASP Top 10 coverage)
+// ──────────────────────────────────────────────────────────────────
+
+// 1. Trust proxy (needed for correct IP behind nginx / reverse proxy)
+serverApp.set("trust proxy", 1);
+
+// 2. Helmet — sets X-Frame-Options, X-Content-Type-Options, HSTS,
+//    Referrer-Policy, Permissions-Policy, and a strict CSP.
+serverApp.use((req, res, next) => {
+    // Generate a per-request nonce for inline scripts (CSP)
+    res.locals.cspNonce = crypto.randomBytes(16).toString("base64");
+    next();
+});
+
+serverApp.use(helmet({
+    // HSTS — force HTTPS for 1 year, include subdomains
+    hsts: tlsOptions ? {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+    } : false,
+
+    // Content Security Policy
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc: [
+                "'self'",
+                // Ad networks
+                "https://pl29124663.profitablecpmratenetwork.com",
+                "https://pl29124765.profitablecpmratenetwork.com",
+                "https://www.highperformanceformat.com",
+                // Fonts & Tailwind (homepage uses CDN)
+                "https://cdn.tailwindcss.com",
+                (req, res) => `'nonce-${res.locals.cspNonce}'`,
+            ],
+            styleSrc:       ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.tailwindcss.com"],
+            fontSrc:        ["'self'", "https://fonts.gstatic.com"],
+            imgSrc:         ["'self'", "data:", "blob:", "https:"],
+            connectSrc:     ["'self'"],
+            frameSrc:       ["'none'"],
+            objectSrc:      ["'none'"],
+            baseUri:        ["'self'"],
+            formAction:     ["'self'"],
+            upgradeInsecureRequests: tlsOptions ? [] : null,
+        },
+    },
+
+    // Prevent MIME-type sniffing
+    noSniff: true,
+
+    // Deny framing (clickjacking)
+    frameguard: { action: "deny" },
+
+    // Hide Express fingerprint
+    hidePoweredBy: true,
+
+    // XSS filter for older browsers
+    xssFilter: true,
+
+    // Referrer policy
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+}));
+
+// 3. Rate limiters — brute-force / DoS protection (OWASP A07)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,   // 15 minutes
+    max: 20,                     // 20 attempts per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again in 15 minutes." },
+    skipSuccessfulRequests: true,
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,        // 1 minute
+    max: 60,                     // 60 requests/min per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Rate limit exceeded. Please slow down." },
+});
+
+const imageLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,                      // 5 image generations/min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Image generation rate limit reached. Please wait a moment." },
+});
+
+// Apply auth limiter to login/signup
+serverApp.use("/login", authLimiter);
+serverApp.use("/signup", authLimiter);
+
+// Apply API limiter to all API routes
+serverApp.use("/api/", apiLimiter);
+
+// 4. Body size limits — prevent large payload attacks
+serverApp.use(express.urlencoded({ extended: true, limit: "2mb" }));
+serverApp.use(express.json({ limit: "15mb" }));  // 15mb for image uploads
 serverApp.use(express.static("public"));
 
-// Sessions
+// 5. Sessions — hardened (OWASP A02)
 serverApp.use(
     session({
-        secret: "chattyisdabest1234",
+        secret: process.env.SESSION_SECRET || crypto.randomBytes(64).toString("hex"),
         resave: false,
         saveUninitialized: false,
-        cookie: { secure: !!tlsOptions },
+        name: "sid",             // Don't leak "connect.sid"
+        cookie: {
+            secure:   !!tlsOptions,
+            httpOnly: true,       // Prevent JS access to cookie
+            sameSite: "strict",   // CSRF mitigation
+            maxAge:   7 * 24 * 60 * 60 * 1000,  // 7 days
+        },
     })
 );
 
-// ----------------------
-// Paths
-// ----------------------
+// 6. Security headers not covered by helmet
+serverApp.use((req, res, next) => {
+    res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    next();
+});
+
+// ──────────────────────────────────────────────────────────────────
+// INPUT SANITISATION HELPERS
+// ──────────────────────────────────────────────────────────────────
+
+// Strip characters that have no place in usernames
+function sanitizeUsername(username) {
+    if (typeof username !== "string") return "";
+    return username.trim().replace(/[^a-zA-Z0-9_\-\.]/g, "").slice(0, 32);
+}
+
+// Validate password constraints
+function validatePassword(password) {
+    if (typeof password !== "string") return false;
+    return password.length >= 8 && password.length <= 128;
+}
+
+// Generic string truncation / trim
+function sanitizeString(str, maxLen = 1000) {
+    if (typeof str !== "string") return "";
+    return str.trim().slice(0, maxLen);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// PATHS
+// ──────────────────────────────────────────────────────────────────
+
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -343,39 +479,48 @@ serverApp.get("/chat", requireLogin, (req, res) => {
 
 // Signup
 serverApp.post("/signup", async (req, res) => {
-    const { username, password } = req.body;
+    const username = sanitizeUsername(req.body.username || "");
+    const password = req.body.password || "";
 
-    if (!username || !password) return res.send("Missing username or password");
+    if (!username) return res.status(400).send("Invalid username. Use letters, numbers, _ - . only (max 32 chars).");
+    if (!validatePassword(password)) return res.status(400).send("Password must be 8–128 characters.");
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 12);
 
     db.run(
         `INSERT INTO users (username, password) VALUES (?, ?)`,
         [username, hashed],
         function (err) {
-            if (err) return res.send("Username already taken");
-            res.send("Signup successful! <a href='/login.html'>Login</a>");
+            if (err) return res.status(409).send("Username already taken.");
+            res.send("Signup successful! <a href='/login.html'>Login here</a>");
         }
     );
 });
 
 // Login
 serverApp.post("/login", (req, res) => {
-    const { username, password } = req.body;
+    const username = sanitizeUsername(req.body.username || "");
+    const password = req.body.password || "";
+
+    if (!username || !password) return res.status(400).send("Missing username or password.");
 
     db.get(
         `SELECT * FROM users WHERE username = ?`,
         [username],
         async (err, row) => {
-            if (!row) return res.send("User not found");
+            // Always run bcrypt to prevent timing attacks even if user not found
+            const dummyHash = "$2b$12$invalidhashfortimingxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+            const match = await bcrypt.compare(password, row ? row.password : dummyHash);
 
-            const match = await bcrypt.compare(password, row.password);
-            if (!match) return res.send("Invalid password");
+            if (!row || !match) return res.status(401).send("Invalid username or password.");
+            if (row.banned) return res.status(403).send("Your account has been suspended.");
 
-            if (row.banned) return res.send("Your account has been suspended. Contact the administrator.");
-
-            req.session.user = { id: row.id, username: row.username };
-            res.redirect("/chat");
+            // Regenerate session on login to prevent session fixation (OWASP A07)
+            req.session.regenerate((regenerateErr) => {
+                if (regenerateErr) return res.status(500).send("Session error. Please try again.");
+                req.session.user = { id: row.id, username: row.username };
+                res.redirect("/chat");
+            });
         }
     );
 });
@@ -860,58 +1005,102 @@ serverApp.get("/api/search", requireLogin, (req, res) => {
 // ----------------------
 // IMAGE GENERATION (NVIDIA NIM - Stable Diffusion XL)
 // ----------------------
-serverApp.post("/api/generate-image", requireLogin, async (req, res) => {
+serverApp.post("/api/generate-image", requireLogin, imageLimiter, async (req, res) => {
     const { prompt, width = 1024, height = 1024 } = req.body;
     if (!prompt || !prompt.trim()) {
         return res.status(400).json({ error: "Prompt is required" });
     }
-
     if (!process.env.NVIDIA_API_KEY) {
         return res.status(500).json({ error: "NVIDIA_API_KEY not set in .env file. Get a free key at build.nvidia.com" });
     }
 
+    const authHeaders = {
+        "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    };
+
     try {
-        // Use NVIDIA NIM image generation — flux-schnell is free tier
-        const response = await fetch("https://integrate.api.nvidia.com/v1/images/generations", {
+        // NVIDIA NIM flux-schnell — returns 200 sync or 202 async w/ polling
+        const initRes = await fetch("https://integrate.api.nvidia.com/v1/images/generations", {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            headers: authHeaders,
             body: JSON.stringify({
                 model: "black-forest-labs/flux-schnell",
                 prompt: prompt.trim(),
                 n: 1,
-                width,
-                height,
+                width: parseInt(width),
+                height: parseInt(height),
                 response_format: "b64_json",
             }),
         });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("NVIDIA image gen error:", response.status, errText);
-            if (response.status === 401 || response.status === 403) {
-                return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
-            }
-            if (response.status === 402) {
-                return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com for your usage." });
-            }
-            if (response.status === 422 || response.status === 400) {
-                return res.status(400).json({ error: "Invalid image request. Try a different prompt." });
-            }
-            return res.status(502).json({ error: `Image generation failed (${response.status})` });
+        if (initRes.status === 401 || initRes.status === 403) {
+            return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
+        }
+        if (initRes.status === 402) {
+            return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com" });
+        }
+        if (initRes.status === 400 || initRes.status === 422) {
+            const t = await initRes.text().catch(() => "");
+            console.error("NVIDIA bad request:", t);
+            return res.status(400).json({ error: "Invalid prompt or parameters. Try a different prompt." });
         }
 
-        const data = await response.json();
-        // OpenAI-compatible response: data.data[0].b64_json
-        const b64 = data.data && data.data[0] && data.data[0].b64_json;
-        if (!b64) {
-            return res.status(502).json({ error: "No image returned from NVIDIA API" });
+        // Helper to extract image from a parsed response body
+        async function extractImage(data) {
+            const b64 = data?.data?.[0]?.b64_json;
+            if (b64) return b64;
+            const url = data?.data?.[0]?.url;
+            if (url) {
+                const imgRes = await fetch(url);
+                const buf = await imgRes.arrayBuffer();
+                return Buffer.from(buf).toString("base64");
+            }
+            return null;
         }
 
-        res.json({ imageBase64: b64, mimeType: "image/png" });
+        // 200 — synchronous response
+        if (initRes.status === 200) {
+            const data = await initRes.json();
+            const b64 = await extractImage(data);
+            if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+            return res.status(502).json({ error: "No image in response from NVIDIA API" });
+        }
+
+        // 202 — async, poll until done
+        if (initRes.status === 202) {
+            const initData = await initRes.json().catch(() => ({}));
+            const requestId = initRes.headers.get("nvcf-reqid")
+                || initRes.headers.get("request-id")
+                || initData?.requestId || initData?.id;
+
+            if (!requestId) {
+                console.error("202 but no request ID. Headers:", [...initRes.headers.entries()], "Body:", initData);
+                return res.status(502).json({ error: "Image generation started but no tracking ID returned. Please try again." });
+            }
+
+            const pollUrl = `https://integrate.api.nvidia.com/v1/status/${requestId}`;
+            for (let i = 0; i < 30; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const pollRes = await fetch(pollUrl, { headers: authHeaders });
+                if (pollRes.status === 202) continue;
+                if (pollRes.status === 200) {
+                    const pollData = await pollRes.json();
+                    const b64 = await extractImage(pollData);
+                    if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+                    return res.status(502).json({ error: "No image in polling response" });
+                }
+                console.error("Poll error:", pollRes.status, await pollRes.text().catch(() => ""));
+                return res.status(502).json({ error: `Image generation failed during processing (${pollRes.status})` });
+            }
+            return res.status(504).json({ error: "Image generation timed out after 60s. Please try again." });
+        }
+
+        const errText = await initRes.text().catch(() => "");
+        console.error("NVIDIA image gen unexpected status:", initRes.status, errText);
+        return res.status(502).json({ error: `Image generation failed (${initRes.status})` });
+
     } catch (err) {
         console.error("Image generation error:", err);
         res.status(500).json({ error: "Image generation failed: " + err.message });
@@ -961,6 +1150,14 @@ serverApp.post("/api/preferences", requireLogin, (req, res) => {
     (err) => {
         if (err) return res.status(500).json({ error: "DB error" });
         res.json({ ok: true });
+    });
+});
+
+// Logout — properly destroy session server-side
+serverApp.post("/logout", (req, res) => {
+    req.session.destroy((err) => {
+        res.clearCookie("sid");
+        res.redirect("/login.html");
     });
 });
 
