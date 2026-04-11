@@ -160,8 +160,35 @@ function requireAdmin(req, res, next) {
 }
 
 // ----------------------
-// SEO — meta tag injection
+// ADS
 // ----------------------
+
+// Popunder — loads once, fires on first click (global on public pages)
+const AD_POPUNDER = `<script src="https://pl29124663.profitablecpmratenetwork.com/90/4a/1c/904a1c9c701444bada023cd278274bae.js"><\/script>`;
+
+// Banner 468×60
+const AD_BANNER = `
+<div class="ad-banner-wrap">
+  <script async="async" data-cfasync="false" src="https://pl29124765.profitablecpmratenetwork.com/abe92782ed9ee894bda77e5c78bb5bcf/invoke.js"><\/script>
+  <div id="container-abe92782ed9ee894bda77e5c78bb5bcf"></div>
+</div>`;
+
+// Inline/native unit
+const AD_INLINE = `
+<div class="ad-inline-wrap">
+  <script>
+    atOptions = { 'key':'fd4b6c44fce1c929dcabdf067c940ad6','format':'iframe','height':60,'width':468,'params':{} };
+  <\/script>
+  <script src="https://www.highperformanceformat.com/fd4b6c44fce1c929dcabdf067c940ad6/invoke.js"><\/script>
+</div>`;
+
+// Shared CSS for ad containers (injected once into pages that show ads)
+const AD_STYLES = `<style>
+.ad-banner-wrap,.ad-inline-wrap{display:flex;justify-content:center;align-items:center;width:100%;padding:8px 0;background:transparent;overflow:hidden}
+.ad-banner-wrap{border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:0}
+.ad-inline-wrap{border-top:1px solid rgba(255,255,255,0.06);margin-top:0;padding:12px 0}
+@media(max-width:500px){.ad-banner-wrap,.ad-inline-wrap{transform:scale(0.72);transform-origin:center}}
+</style>`;
 
 const SITE_URL    = "https://chatty.mk";
 const SITE_NAME   = "Chatty";
@@ -265,8 +292,8 @@ function buildMetaTags(route, extraTitle) {
   <meta name="twitter:image" content="${DEFAULT_IMG}" />${ld}`;
 }
 
-// Read a file, inject meta tags, send it
-function sendWithSEO(res, filePath, route, extraTitle) {
+// Read a file, inject meta tags + optional ads, send it
+function sendWithSEO(res, filePath, route, extraTitle, adOpts = {}) {
     fs.readFile(filePath, "utf8", (err, html) => {
         if (err) return res.status(404).send("Not found");
         // Replace existing <title>...</title> + anything we injected before
@@ -281,6 +308,19 @@ function sendWithSEO(res, filePath, route, extraTitle) {
         html = html.replace(/\s*<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");
         // Inject after <head>
         html = html.replace("<head>", `<head>\n  ${buildMetaTags(route, extraTitle)}`);
+
+        // Inject ads
+        if (adOpts.popunder) {
+            html = html.replace("</head>", `${AD_POPUNDER}\n${AD_STYLES}\n</head>`);
+        }
+        if (adOpts.bannerTop) {
+            // After opening <body> tag
+            html = html.replace(/<body[^>]*>/, (match) => `${match}\n${AD_BANNER}`);
+        }
+        if (adOpts.bannerBottom) {
+            html = html.replace("</body>", `${AD_INLINE}\n</body>`);
+        }
+
         res.setHeader("Content-Type", "text/html");
         res.send(html);
     });
@@ -292,7 +332,8 @@ function sendWithSEO(res, filePath, route, extraTitle) {
 
 // Home
 serverApp.get("/", (req, res) => {
-    sendWithSEO(res, path.join(__dirname, "public", "index.html"), "/");
+    sendWithSEO(res, path.join(__dirname, "public", "index.html"), "/", null,
+        { popunder: true, bannerTop: true, bannerBottom: true });
 });
 
 // Chat (PROTECTED)
@@ -609,7 +650,8 @@ serverApp.delete("/api/chat/:chatId", requireLogin, (req, res) => {
 
 // serve the shared chat page (no login required)
 serverApp.get("/shared/:token", (req, res) => {
-    sendWithSEO(res, path.join(__dirname, "public", "shared.html"), "/shared");
+    sendWithSEO(res, path.join(__dirname, "public", "shared.html"), "/shared", null,
+        { popunder: true, bannerTop: true });
 });
 
 // create a public share link for a chat

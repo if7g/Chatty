@@ -3,129 +3,334 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shared Chat</title>
+  <title>Shared Conversation — Chatty</title>
   <link rel="stylesheet" href="css/main.css">
+  <style>
+    /* Shared page overrides */
+    body { overflow: auto; }
+
+    .shared-layout {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--bg-base);
+    }
+
+    /* Top bar */
+    .shared-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .shared-topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .shared-topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .shared-topbar-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .try-btn {
+      padding: 7px 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .try-btn:hover { background: var(--accent-dim); }
+
+    /* Conversation area */
+    .shared-body {
+      flex: 1;
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Chat title */
+    .shared-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .shared-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Messages — reuse .message styles from main.css */
+    .messages-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Error / loading states */
+    .shared-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .shared-state h3 { font-size: 17px; color: var(--text-primary); margin-bottom: 8px; }
+    .shared-state p  { font-size: 13px; }
+
+    /* Footer CTA */
+    .shared-footer {
+      text-align: center;
+      padding: 32px 20px;
+      border-top: 1px solid var(--border-subtle);
+      margin-top: 20px;
+    }
+    .shared-footer p { font-size: 14px; color: var(--text-secondary); margin-bottom: 14px; }
+
+    @media (max-width: 600px) {
+      .shared-topbar { padding: 10px 14px; }
+      .shared-body   { padding: 20px 14px 40px; }
+      .shared-title  { font-size: 17px; }
+      .shared-topbar-meta { display: none; }
+      .message { max-width: 100% !important; }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <h2>Shared Conversation</h2>
-      </div>
-      <div class="model-selector">
-        <select id="modelSelect" disabled></select>
-      </div>
-    </div>
-    <div class="main-content">
-      <div class="chat-header">
-        <div class="chat-title" id="chatTitle">Shared Chat</div>
-      </div>
-      <div id="chat-box">
-        <div class="empty-state">
-          <h3>Loading conversation...</h3>
-        </div>
-      </div>
+<div class="shared-layout">
+
+  <!-- Top bar -->
+  <div class="shared-topbar">
+    <a href="/" class="shared-topbar-logo">
+      <span class="sidebar-logo-dot"></span>
+      Chatty
+    </a>
+    <div class="shared-topbar-right">
+      <span class="shared-topbar-meta" id="modelLabel"></span>
+      <a href="/signup" class="try-btn">Try for free →</a>
     </div>
   </div>
 
+  <!-- Main content -->
+  <div class="shared-body">
+    <div id="loadingState" class="shared-state">
+      <h3>Loading conversation…</h3>
+      <p>Fetching the shared chat</p>
+    </div>
+
+    <div id="chatContent" style="display:none">
+      <div class="shared-title" id="chatTitle"></div>
+      <div class="shared-subtitle">
+        <span id="modelBadge"></span>
+        <span id="messageCount"></span>
+      </div>
+      <div class="messages-wrap" id="messagesWrap"></div>
+    </div>
+
+    <div id="errorState" class="shared-state" style="display:none">
+      <h3>Conversation not found</h3>
+      <p>This share link may have expired or been removed.</p>
+    </div>
+
+    <!-- Footer CTA -->
+    <div class="shared-footer" id="footerCta" style="display:none">
+      <p>Want to have conversations like this with free AI models?</p>
+      <a href="/signup" class="try-btn" style="display:inline-block;padding:10px 24px;font-size:14px">
+        Create a free account →
+      </a>
+    </div>
+  </div>
+
+</div>
+
 <script>
-// shared viewer script - similar helpers to chat.html
-
-document.addEventListener('DOMContentLoaded', async () => {
-  const parts = window.location.pathname.split('/');
-  const token = parts[parts.length - 1];
-  try {
-    const res = await fetch(`/api/shared/${token}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    chatTitle.textContent = data.title || 'Shared Chat';
-    modelSelect.innerHTML = '';
-    const opt = document.createElement('option');
-    opt.textContent = data.model || '';
-    modelSelect.appendChild(opt);
-
-    chatBox.innerHTML = '';
-    data.messages.forEach(msg => {
-      addMessage(msg.content || "", msg.role === 'user' ? 'user' : 'ai', msg.imageDataUrl || null);
-    });
-  } catch (err) {
-    console.error('Error loading shared chat:', err);
-    chatBox.innerHTML = '<div class="empty-state"><h3>Unable to load conversation</h3></div>';
-  }
-});
-
-// escape, markdownToHTML, addMessage reused from chat.html
+/* ── Helpers ── */
 function escapeHTML(text) {
-  return text
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
 
-function markdownToHTML(text) {
-  text = text.replace(/`([\s\S]*?)`/g, (match, code) => {
-    if (code.includes("\n")) {
-      return "```\n" + code + "\n```";
+function markdownToHTML(raw) {
+  let text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const stash = [];
+  const stashIt = html => { const k = `\x00S${stash.length}\x00`; stash.push(html); return k; };
+  const restoreStash = s => s.replace(/\x00S(\d+)\x00/g, (_, i) => stash[+i]);
+
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const cls = lang ? ` class="code-block ${escapeHTML(lang)}"` : ' class="code-block"';
+    return stashIt(`<pre${cls}><code>${escapeHTML(code.replace(/\n$/, ""))}</code></pre>`);
+  });
+
+  const rawBlocks = text.split(/\n{2,}/);
+  const blocks = rawBlocks.map(block => {
+    if (/^\x00S\d+\x00$/.test(block.trim())) return restoreStash(block.trim());
+    const lines = block.split("\n");
+
+    if (lines.every(l => /^[ \t]*[-*+] /.test(l) || l.trim() === "")) {
+      const items = lines.filter(l => /^[ \t]*[-*+] /.test(l))
+        .map(l => `<li>${inlineFormat(l.replace(/^[ \t]*[-*+] /, ""))}</li>`).join("");
+      return `<ul class="markdown-list">${items}</ul>`;
     }
-    return match;
+    if (lines.every(l => /^\d+\. /.test(l) || l.trim() === "")) {
+      const items = lines.filter(l => /^\d+\. /.test(l))
+        .map(l => `<li>${inlineFormat(l.replace(/^\d+\. /, ""))}</li>`).join("");
+      return `<ol class="markdown-ol">${items}</ol>`;
+    }
+    if (/^#{1,3} /.test(lines[0])) {
+      return lines.map(l => {
+        const m = l.match(/^(#{1,3}) (.+)/);
+        if (!m) return `<p>${inlineFormat(l)}</p>`;
+        const tag = ["h3","h4","h5"][m[1].length - 1] || "h5";
+        return `<${tag} class="md-heading">${inlineFormat(m[2])}</${tag}>`;
+      }).join("");
+    }
+    if (lines.every(l => /^> /.test(l) || l.trim() === "")) {
+      const inner = lines.filter(l => /^> /.test(l))
+        .map(l => inlineFormat(l.replace(/^> /, ""))).join("<br>");
+      return `<blockquote class="md-blockquote">${inner}</blockquote>`;
+    }
+    if (/^[-*_]{3,}$/.test(lines[0].trim())) return `<hr class="md-hr">`;
+    const html = lines.map(l =>
+      /^\x00S\d+\x00$/.test(l.trim()) ? restoreStash(l.trim()) : inlineFormat(l)
+    ).join("<br>");
+    return `<p>${html}</p>`;
   });
-  text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<pre class="code-block ${lang || ''}"><code>${escapeHTML(code)}</code></pre>`;
+  return restoreStash(blocks.join("\n"));
+}
+
+function inlineFormat(text) {
+  const iStash = [];
+  text = text.replace(/`([^`]+)`/g, (_, code) => {
+    const k = `\x00I${iStash.length}\x00`;
+    iStash.push(`<code class="inline-code">${escapeHTML(code)}</code>`);
+    return k;
   });
-  text = text.replace(/`([^`\n]+)`/g, (match, code) => {
-    return `<code class="inline-code">${escapeHTML(code)}</code>`;
-  });
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, title, url) => {
-    return `<a href="${escapeHTML(url)}" target="_blank" class="markdown-link">${escapeHTML(title)}</a>`;
-  });
-  text = text.replace(/\*\*\*([^\*]+)\*\*\*/g, "<b><i>$1</i></b>");
-  text = text.replace(/___([^_]+)___/g, "<b><i>$1</i></b>");
-  text = text.replace(/\*\*([^\*]+)\*\*/g, "<b>$1</b>");
-  text = text.replace(/__([^_]+)__/g, "<b>$1</b>");
-  text = text.replace(/\*([^\*]+)\*/g, "<i>$1</i>");
-  text = text.replace(/_([^_]+)_/g, "<i>$1</i>");
-  text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  text = text.replace(/(?:^|\n)([\s]*)[-*+]\s+(.+?)(?=\n|$)/gm, (match, indent, item) => {
-    return `<li class="markdown-list-item">${item}</li>`;
-  });
-  text = text.replace(/(<li class="markdown-list-item">.*?<\/li>)/s, (match) => {
-    return `<ul class="markdown-list">${match}</ul>`;
-  });
-  text = text.replace(/(?:^|\n)(\d+)\.\s+(.+?)(?=\n|$)/gm, (match, num, item) => {
-    return `<li class="markdown-list-item">${item}</li>`;
-  });
-  text = text.replace(/\n/g, "<br>");
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
+    `<a href="${escapeHTML(u)}" target="_blank" rel="noopener" class="markdown-link">${escapeHTML(t)}</a>`);
+  text = text.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
+  text = text.replace(/___([^_]+)___/g, "<strong><em>$1</em></strong>");
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+  text = text.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  text = text.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+  text = text.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  text = text.replace(/\x00I(\d+)\x00/g, (_, i) => iStash[+i]);
   return text;
 }
 
-function addMessage(content, sender, imageDataUrl = null) {
-  if (document.querySelector('.empty-state')) document.querySelector('.empty-state').remove();
+function renderMessage(msg) {
+  const sender = msg.role === "user" ? "user" : "ai";
+  const content = typeof msg.content === "string" ? msg.content : "";
+
   const messageDiv = document.createElement("div");
   messageDiv.classList.add("message", sender);
+
   const avatar = document.createElement("div");
   avatar.classList.add("message-avatar");
   avatar.textContent = sender === "user" ? "U" : "AI";
+
   const messageContent = document.createElement("div");
   messageContent.classList.add("message-content");
-  if (typeof content === "string" && content.trim()) {
+
+  if (content.trim()) {
     const textDiv = document.createElement("div");
     textDiv.classList.add("message-text");
     textDiv.innerHTML = markdownToHTML(content);
     messageContent.appendChild(textDiv);
   }
-  if (imageDataUrl) {
-    const img = document.createElement("img");
-    img.classList.add("message-image");
-    img.src = imageDataUrl;
-    img.alt = sender === "user" ? "Uploaded image" : "Generated image";
-    img.loading = "lazy";
-    messageContent.appendChild(img);
+
+  // Handle image content (multipart vision messages stored as [Image: ...])
+  if (content.startsWith("[Image:")) {
+    messageContent.style.fontStyle = "italic";
+    messageContent.style.color = "var(--text-muted)";
   }
+
   messageDiv.appendChild(avatar);
   messageDiv.appendChild(messageContent);
-  document.getElementById("chat-box").appendChild(messageDiv);
-  document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+  return messageDiv;
 }
+
+/* ── Load shared chat ── */
+async function loadSharedChat() {
+  const token = window.location.pathname.split("/").filter(Boolean).pop();
+
+  if (!token || token === "shared") {
+    showError();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/shared/${token}`);
+    if (!res.ok) throw new Error("Not found");
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+
+    // Populate header
+    document.getElementById("chatTitle").textContent = data.title || "Shared Conversation";
+    document.getElementById("modelLabel").textContent = data.model || "";
+    document.getElementById("modelBadge").textContent = data.model ? `Model: ${data.model}` : "";
+    document.getElementById("messageCount").textContent =
+      `${messages.length} message${messages.length !== 1 ? "s" : ""}`;
+
+    // Render messages
+    const wrap = document.getElementById("messagesWrap");
+    if (!messages.length) {
+      wrap.innerHTML = '<div class="shared-state"><p>This conversation is empty.</p></div>';
+    } else {
+      messages.forEach(msg => wrap.appendChild(renderMessage(msg)));
+    }
+
+    document.getElementById("loadingState").style.display = "none";
+    document.getElementById("chatContent").style.display = "block";
+    document.getElementById("footerCta").style.display = "block";
+
+  } catch (err) {
+    console.error("Error loading shared chat:", err);
+    showError();
+  }
+}
+
+function showError() {
+  document.getElementById("loadingState").style.display = "none";
+  document.getElementById("errorState").style.display = "block";
+}
+
+loadSharedChat();
 </script>
 </body>
 </html>

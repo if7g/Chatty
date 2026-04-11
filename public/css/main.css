@@ -355,10 +355,10 @@ body {
 .message-content {
   background: var(--ai-bubble);
   padding: 10px 14px;
-  border-radius: 4px 14px 14px 14px;
+  border-radius: var(--bubble-ai-radius, 4px 14px 14px 14px);
   color: var(--text-primary);
   line-height: 1.65;
-  font-size: 13.5px;
+  font-size: var(--msg-font-size, 13.5px);
   word-break: break-word;
   border: 1px solid var(--border-subtle);
   max-width: 100%;
@@ -367,7 +367,7 @@ body {
 .message.user .message-content {
   background: var(--user-bubble);
   color: #fff;
-  border-radius: 14px 4px 14px 14px;
+  border-radius: var(--bubble-user-radius, 14px 4px 14px 14px);
   border-color: transparent;
 }
 
@@ -834,10 +834,185 @@ b { font-weight: 600; }
 i { font-style: italic; }
 del { text-decoration: line-through; color: var(--text-muted); }
 
-@media (max-width: 700px) {
-  .sidebar { display: none; }
-  #chat-box { padding: 16px 14px; }
-  .input-container { padding: 10px 14px; }
-  .message { max-width: 100%; }
-  .chat-header { padding: 10px 16px; }
+/* ── Mobile sidebar overlay ── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 199;
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
+.sidebar-overlay.visible {
+  opacity: 1;
+}
+
+/* Menu button — hidden on desktop */
+.menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.menu-btn:hover { color: var(--text-primary); }
+
+@media (max-width: 700px) {
+  /* Show menu button */
+  .menu-btn { display: flex; align-items: center; justify-content: center; }
+
+  /* Sidebar becomes a fixed drawer */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 200;
+    width: 80vw;
+    max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay { display: block; }
+
+  /* Main layout fills screen */
+  .main-content { width: 100%; min-width: 0; }
+
+  /* Header tighter */
+  .chat-header {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .chat-title {
+    flex: 1;
+    font-size: 13.5px;
+    max-width: none;
+  }
+
+  /* Hide verbose header buttons, keep only icons */
+  .header-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  /* Collapse Save/Rename text on very small screens */
+  @media (max-width: 400px) {
+    #saveBtn, #renameBtn { display: none; }
+  }
+
+  /* Chat box */
+  #chat-box {
+    padding: 14px 12px;
+    gap: 14px;
+  }
+
+  /* Messages go full width */
+  .message { max-width: 100%; }
+  .message.user { max-width: 88%; }
+
+  /* Input area — safe area for iOS home bar */
+  .input-container {
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* Bigger tap targets for send/upload buttons */
+  #sendBtn {
+    padding: 10px 16px;
+    min-width: 60px;
+  }
+  .upload-btn, .image-gen-btn {
+    padding: 10px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* Message text slightly smaller */
+  .message-content { font-size: 13px; }
+
+  /* Generated images full width on mobile */
+  .generated-image, .uploaded-image { max-width: 100%; }
+  .image-message-content { max-width: 100%; }
+
+  /* Modals full-screen on mobile */
+  .modal-content {
+    width: 95%;
+    max-width: none;
+    border-radius: var(--radius-lg);
+    max-height: 90vh;
+    margin: 0 auto;
+  }
+  .modal-content.wide-modal { max-width: none; }
+
+  /* Settings preference rows stack vertically */
+  .pref-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .pref-label { width: auto; }
+
+  /* Footer note hidden on mobile to save space */
+  .footer-note { display: none; }
+
+  /* Search results wider */
+  .search-results { left: 0; right: 0; }
+
+  /* Empty state smaller */
+  .empty-state h3 { font-size: 15px; }
+  .empty-state p  { font-size: 12px; }
+}
+
+/* ── Preference UI ── */
+.pref-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.pref-label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  width: 120px;
+  flex-shrink: 0;
+}
+.color-swatches {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+  outline: none;
+  flex-shrink: 0;
+  padding: 0;
+}
+.swatch:hover { transform: scale(1.15); }
+.swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+
+.pref-options { display: flex; gap: 5px; }
+.pref-opt {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.pref-opt:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.pref-opt.active { background: var(--accent-glow); color: var(--accent); border-color: var(--accent); }
