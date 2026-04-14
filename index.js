@@ -42,67 +42,55 @@ serverApp.use((req, res, next) => {
 });
 
 serverApp.use(helmet({
-    // HSTS — force HTTPS for 1 year, include subdomains
     hsts: tlsOptions ? {
         maxAge: 31536000,
         includeSubDomains: true,
         preload: true,
     } : false,
 
-    // Content Security Policy
     contentSecurityPolicy: {
         directives: {
-            defaultSrc:     ["'self'"],
+            defaultSrc: ["'self'"],
             scriptSrc: [
                 "'self'",
-                "'unsafe-inline'",  // Required for ad network inline scripts (atOptions etc.)
-                // Ad networks
+                "'unsafe-inline'", // Enabled for compatibility
                 "https://pl29124663.profitablecpmratenetwork.com",
                 "https://pl29124765.profitablecpmratenetwork.com",
                 "https://www.highperformanceformat.com",
                 "https://a.magsrv.com",
                 "https://syndication.realsrv.com",
-                // Fonts & Tailwind (homepage uses CDN)
                 "https://cdn.tailwindcss.com",
-                (req, res) => `'nonce-${res.locals.cspNonce}'`,
             ],
-            styleSrc:       ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.tailwindcss.com"],
-            fontSrc:        ["'self'", "https://fonts.gstatic.com"],
-            imgSrc:         ["'self'", "data:", "blob:", "https:"],
-            // Ad networks need to connect to their own servers + popunder uses iframes
-            connectSrc:     [
+            // FIXED: Allow inline event handlers (onclick, etc.)
+            scriptSrcAttr: ["'unsafe-inline'"], 
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.tailwindcss.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "blob:", "https:"],
+            connectSrc: [
                 "'self'",
+                "https:*", // Broadened to allow AI API connections
+                "wss:*",
                 "https://pl29124663.profitablecpmratenetwork.com",
                 "https://pl29124765.profitablecpmratenetwork.com",
                 "https://www.highperformanceformat.com",
                 "https://a.magsrv.com",
             ],
-            frameSrc:       [
+            frameSrc: [
                 "'self'",
                 "https://pl29124663.profitablecpmratenetwork.com",
                 "https://pl29124765.profitablecpmratenetwork.com",
                 "https://www.highperformanceformat.com",
             ],
-            objectSrc:      ["'none'"],
-            baseUri:        ["'self'"],
-            formAction:     ["'self'"],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
             upgradeInsecureRequests: tlsOptions ? [] : null,
         },
     },
-
-    // Prevent MIME-type sniffing
     noSniff: true,
-
-    // Deny framing (clickjacking)
     frameguard: { action: "deny" },
-
-    // Hide Express fingerprint
     hidePoweredBy: true,
-
-    // XSS filter for older browsers
     xssFilter: true,
-
-    // Referrer policy
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 }));
 
@@ -150,12 +138,12 @@ serverApp.use(
         secret: process.env.SESSION_SECRET || crypto.randomBytes(64).toString("hex"),
         resave: false,
         saveUninitialized: false,
-        name: "sid",             // Don't leak "connect.sid"
+        name: "sid",
         cookie: {
-            secure:   !!tlsOptions,
-            httpOnly: true,       // Prevent JS access to cookie
-            sameSite: "strict",   // CSRF mitigation
-            maxAge:   7 * 24 * 60 * 60 * 1000,  // 7 days
+            secure: !!tlsOptions,
+            httpOnly: true,
+            sameSite: "lax", // Changed from "strict" to prevent logout issues
+            maxAge: 7 * 24 * 60 * 60 * 1000,
         },
     })
 );
