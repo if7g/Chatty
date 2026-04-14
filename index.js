@@ -55,10 +55,13 @@ serverApp.use(helmet({
             defaultSrc:     ["'self'"],
             scriptSrc: [
                 "'self'",
+                "'unsafe-inline'",  // Required for ad network inline scripts (atOptions etc.)
                 // Ad networks
                 "https://pl29124663.profitablecpmratenetwork.com",
                 "https://pl29124765.profitablecpmratenetwork.com",
                 "https://www.highperformanceformat.com",
+                "https://a.magsrv.com",
+                "https://syndication.realsrv.com",
                 // Fonts & Tailwind (homepage uses CDN)
                 "https://cdn.tailwindcss.com",
                 (req, res) => `'nonce-${res.locals.cspNonce}'`,
@@ -66,8 +69,20 @@ serverApp.use(helmet({
             styleSrc:       ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.tailwindcss.com"],
             fontSrc:        ["'self'", "https://fonts.gstatic.com"],
             imgSrc:         ["'self'", "data:", "blob:", "https:"],
-            connectSrc:     ["'self'"],
-            frameSrc:       ["'none'"],
+            // Ad networks need to connect to their own servers + popunder uses iframes
+            connectSrc:     [
+                "'self'",
+                "https://pl29124663.profitablecpmratenetwork.com",
+                "https://pl29124765.profitablecpmratenetwork.com",
+                "https://www.highperformanceformat.com",
+                "https://a.magsrv.com",
+            ],
+            frameSrc:       [
+                "'self'",
+                "https://pl29124663.profitablecpmratenetwork.com",
+                "https://pl29124765.profitablecpmratenetwork.com",
+                "https://www.highperformanceformat.com",
+            ],
             objectSrc:      ["'none'"],
             baseUri:        ["'self'"],
             formAction:     ["'self'"],
@@ -300,22 +315,19 @@ function requireAdmin(req, res, next) {
 // ----------------------
 
 // Popunder — loads once, fires on first click (global on public pages)
-const AD_POPUNDER = `<script src="https://pl29124663.profitablecpmratenetwork.com/90/4a/1c/904a1c9c701444bada023cd278274bae.js"><\/script>`;
+const AD_POPUNDER = `<script src="https://pl29124663.profitablecpmratenetwork.com/90/4a/1c/904a1c9c701444bada023cd278274bae.js"><\\/script>`;
 
 // Banner 468×60
 const AD_BANNER = `
 <div class="ad-banner-wrap">
-  <script async="async" data-cfasync="false" src="https://pl29124765.profitablecpmratenetwork.com/abe92782ed9ee894bda77e5c78bb5bcf/invoke.js"><\/script>
+  <script async="async" data-cfasync="false" src="https://pl29124765.profitablecpmratenetwork.com/abe92782ed9ee894bda77e5c78bb5bcf/invoke.js"><\\/script>
   <div id="container-abe92782ed9ee894bda77e5c78bb5bcf"></div>
 </div>`;
 
-// Inline/native unit
+// Inline/native unit — use invoke.js only (no inline atOptions; the invoke.js sets its own config)
 const AD_INLINE = `
-<div class="ad-inline-wrap">
-  <script>
-    atOptions = { 'key':'fd4b6c44fce1c929dcabdf067c940ad6','format':'iframe','height':60,'width':468,'params':{} };
-  <\/script>
-  <script src="https://www.highperformanceformat.com/fd4b6c44fce1c929dcabdf067c940ad6/invoke.js"><\/script>
+<div class="ad-inline-wrap" data-ad-key="fd4b6c44fce1c929dcabdf067c940ad6">
+  <script async="async" data-cfasync="false" src="https://www.highperformanceformat.com/fd4b6c44fce1c929dcabdf067c940ad6/invoke.js"><\\/script>
 </div>`;
 
 // Shared CSS for ad containers (injected once into pages that show ads)
@@ -547,10 +559,13 @@ const NVIDIA_MODELS = [
     { id: "google/gemma-2-9b-it",                 label: "Gemma 2 9B",               vision: false },
     { id: "google/gemma-2-27b-it",                label: "Gemma 2 27B",              vision: false },
     { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B",           vision: false },
-    { id: "deepseek-ai/deepseek-r1",              label: "DeepSeek R1",              vision: false },
+    // DeepSeek R1 — uses <think> reasoning tokens; stripped server-side
+    { id: "deepseek-ai/deepseek-r1",              label: "DeepSeek R1 🧠",           vision: false },
     { id: "microsoft/phi-3-medium-128k-instruct", label: "Phi-3 Medium 128k",        vision: false },
     { id: "microsoft/phi-3-mini-128k-instruct",   label: "Phi-3 Mini 128k",          vision: false },
-    { id: "qwen/qwen2-7b-instruct",               label: "Qwen2 7B",                 vision: false },
+    // Qwen2.5 — updated model ID (qwen2-7b was deprecated on NIM)
+    { id: "qwen/qwen2.5-7b-instruct",             label: "Qwen 2.5 7B",              vision: false },
+    { id: "qwen/qwen2.5-72b-instruct",            label: "Qwen 2.5 72B",             vision: false },
 ];
 
 // Per-model memory (dynamically keyed by model id)
@@ -561,9 +576,11 @@ function toUserMessageContent(message) {
 }
 
 function normalizeAssistantReply(reply) {
-    if (typeof reply === "string") return reply;
-    if (Array.isArray(reply)) {
-        const text = reply
+    let text;
+    if (typeof reply === "string") {
+        text = reply;
+    } else if (Array.isArray(reply)) {
+        text = reply
             .map((part) => {
                 if (typeof part === "string") return part;
                 if (part && typeof part === "object" && part.type === "text") return part.text || "";
@@ -571,10 +588,19 @@ function normalizeAssistantReply(reply) {
             })
             .join("\n")
             .trim();
-        return text || "No response received";
+        text = text || "No response received";
+    } else if (reply && typeof reply === "object") {
+        // Some models (Qwen) wrap in {text: "..."} or {content: "..."}
+        text = reply.text || reply.content || JSON.stringify(reply);
+    } else {
+        return "No response received";
     }
-    if (reply && typeof reply === "object") return JSON.stringify(reply);
-    return "No response received";
+
+    // Strip DeepSeek R1 <think>...</think> reasoning blocks from the visible reply.
+    // These are internal chain-of-thought tokens not meant for display.
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+    return text || "No response received";
 }
 
 // Retry logic with exponential backoff
@@ -1003,7 +1029,7 @@ serverApp.get("/api/search", requireLogin, (req, res) => {
 });
 
 // ----------------------
-// IMAGE GENERATION (NVIDIA NIM - Stable Diffusion XL)
+// IMAGE GENERATION (NVIDIA NIM - Stable Diffusion / FLUX)
 // ----------------------
 serverApp.post("/api/generate-image", requireLogin, imageLimiter, async (req, res) => {
     const { prompt, width = 1024, height = 1024 } = req.body;
@@ -1016,95 +1042,133 @@ serverApp.post("/api/generate-image", requireLogin, imageLimiter, async (req, re
 
     const authHeaders = {
         "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
     };
 
-    try {
-        // NVIDIA NIM flux-schnell — returns 200 sync or 202 async w/ polling
-        const initRes = await fetch("https://integrate.api.nvidia.com/v1/images/generations", {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({
-                model: "black-forest-labs/flux-schnell",
-                prompt: prompt.trim(),
-                n: 1,
-                width: parseInt(width),
-                height: parseInt(height),
-                response_format: "b64_json",
-            }),
-        });
+    // Helper: extract base64 image from any NVIDIA NIM image response shape
+    async function extractImage(data) {
+        // Standard: data[0].b64_json
+        const b64 = data?.data?.[0]?.b64_json
+                 || data?.images?.[0]?.b64_json
+                 || data?.artifacts?.[0]?.base64;
+        if (b64) return b64;
 
-        if (initRes.status === 401 || initRes.status === 403) {
-            return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
-        }
-        if (initRes.status === 402) {
-            return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com" });
-        }
-        if (initRes.status === 400 || initRes.status === 422) {
-            const t = await initRes.text().catch(() => "");
-            console.error("NVIDIA bad request:", t);
-            return res.status(400).json({ error: "Invalid prompt or parameters. Try a different prompt." });
-        }
-
-        // Helper to extract image from a parsed response body
-        async function extractImage(data) {
-            const b64 = data?.data?.[0]?.b64_json;
-            if (b64) return b64;
-            const url = data?.data?.[0]?.url;
-            if (url) {
+        // URL variant — download and convert
+        const url = data?.data?.[0]?.url
+                 || data?.images?.[0]?.url;
+        if (url) {
+            try {
                 const imgRes = await fetch(url);
+                if (!imgRes.ok) return null;
                 const buf = await imgRes.arrayBuffer();
                 return Buffer.from(buf).toString("base64");
-            }
-            return null;
+            } catch { return null; }
         }
-
-        // 200 — synchronous response
-        if (initRes.status === 200) {
-            const data = await initRes.json();
-            const b64 = await extractImage(data);
-            if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
-            return res.status(502).json({ error: "No image in response from NVIDIA API" });
-        }
-
-        // 202 — async, poll until done
-        if (initRes.status === 202) {
-            const initData = await initRes.json().catch(() => ({}));
-            const requestId = initRes.headers.get("nvcf-reqid")
-                || initRes.headers.get("request-id")
-                || initData?.requestId || initData?.id;
-
-            if (!requestId) {
-                console.error("202 but no request ID. Headers:", [...initRes.headers.entries()], "Body:", initData);
-                return res.status(502).json({ error: "Image generation started but no tracking ID returned. Please try again." });
-            }
-
-            const pollUrl = `https://integrate.api.nvidia.com/v1/status/${requestId}`;
-            for (let i = 0; i < 30; i++) {
-                await new Promise(r => setTimeout(r, 2000));
-                const pollRes = await fetch(pollUrl, { headers: authHeaders });
-                if (pollRes.status === 202) continue;
-                if (pollRes.status === 200) {
-                    const pollData = await pollRes.json();
-                    const b64 = await extractImage(pollData);
-                    if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
-                    return res.status(502).json({ error: "No image in polling response" });
-                }
-                console.error("Poll error:", pollRes.status, await pollRes.text().catch(() => ""));
-                return res.status(502).json({ error: `Image generation failed during processing (${pollRes.status})` });
-            }
-            return res.status(504).json({ error: "Image generation timed out after 60s. Please try again." });
-        }
-
-        const errText = await initRes.text().catch(() => "");
-        console.error("NVIDIA image gen unexpected status:", initRes.status, errText);
-        return res.status(502).json({ error: `Image generation failed (${initRes.status})` });
-
-    } catch (err) {
-        console.error("Image generation error:", err);
-        res.status(500).json({ error: "Image generation failed: " + err.message });
+        return null;
     }
+
+    // Try flux-schnell first, fall back to sdxl-turbo if quota/unavailable
+    const MODELS = [
+        {
+            url:  "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux-schnell",
+            body: {
+                prompt: prompt.trim(),
+                width:  parseInt(width),
+                height: parseInt(height),
+                num_inference_steps: 4,
+                guidance:            0,
+            },
+        },
+        {
+            url:  "https://ai.api.nvidia.com/v1/genai/stabilityai/sdxl-turbo",
+            body: {
+                text_prompts: [{ text: prompt.trim(), weight: 1 }],
+                seed:         0,
+                sampler:      "K_EULER_ANCESTRAL",
+                steps:        2,
+                cfg_scale:    0,
+            },
+        },
+    ];
+
+    for (const attempt of MODELS) {
+        try {
+            const initRes = await fetch(attempt.url, {
+                method:  "POST",
+                headers: authHeaders,
+                body:    JSON.stringify(attempt.body),
+            });
+
+            if (initRes.status === 401 || initRes.status === 403) {
+                return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
+            }
+            if (initRes.status === 402) {
+                return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com" });
+            }
+            if (initRes.status === 400 || initRes.status === 422) {
+                const t = await initRes.text().catch(() => "");
+                console.error("NVIDIA bad request:", t);
+                continue; // try next model
+            }
+            // Skip unavailable models (503 / 404) and try next
+            if (initRes.status === 404 || initRes.status === 503) {
+                console.warn(`Model at ${attempt.url} unavailable (${initRes.status}), trying next…`);
+                continue;
+            }
+
+            // 200 — synchronous response
+            if (initRes.status === 200) {
+                const data = await initRes.json();
+                const b64  = await extractImage(data);
+                if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+                console.error("200 but no image in body:", JSON.stringify(data).slice(0, 300));
+                continue;
+            }
+
+            // 202 — async polling
+            if (initRes.status === 202) {
+                const initData  = await initRes.json().catch(() => ({}));
+                const requestId = initRes.headers.get("nvcf-reqid")
+                               || initRes.headers.get("request-id")
+                               || initData?.requestId || initData?.id;
+
+                if (!requestId) {
+                    console.error("202 but no request ID:", JSON.stringify(initData).slice(0, 200));
+                    continue;
+                }
+
+                // NVIDIA changed polling endpoint — use nvcf status URL
+                const pollUrl = `https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/${requestId}`;
+                for (let i = 0; i < 30; i++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    const pollRes = await fetch(pollUrl, { headers: authHeaders });
+                    if (pollRes.status === 202) continue;
+                    if (pollRes.status === 200) {
+                        const pollData = await pollRes.json();
+                        const b64 = await extractImage(pollData);
+                        if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+                        return res.status(502).json({ error: "No image in polling response" });
+                    }
+                    const errTxt = await pollRes.text().catch(() => "");
+                    console.error("Poll error:", pollRes.status, errTxt);
+                    break; // give up on this model
+                }
+                continue;
+            }
+
+            const errText = await initRes.text().catch(() => "");
+            console.error("NVIDIA image gen unexpected status:", initRes.status, errText);
+            continue;
+
+        } catch (err) {
+            console.error("Image gen attempt error:", err.message);
+            // Network error — don't try next model, surface immediately
+            return res.status(500).json({ error: "Image generation failed: " + err.message });
+        }
+    }
+
+    return res.status(502).json({ error: "All image generation models are currently unavailable. Please try again later." });
 });
 
 // Admin model list override (stored in DB as a special row)
@@ -1183,10 +1247,16 @@ serverApp.get("/api/admin/stats", requireAdmin, (req, res) => {
     db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 0 OR banned IS NULL`, [], (err, users) => {
         db.get(`SELECT COUNT(*) as total FROM chat_conversations`, [], (err2, chats) => {
             db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 1`, [], (err3, banned) => {
-                res.json({
-                    users:   users?.total  || 0,
-                    chats:   chats?.total  || 0,
-                    banned:  banned?.total || 0,
+                db.get(`SELECT COUNT(*) as total FROM users WHERE id > (SELECT COALESCE(MAX(id),0) - 10 FROM users)`, [], (err4, recent) => {
+                    db.get(`SELECT COUNT(*) as total FROM shared_chats`, [], (err5, shared) => {
+                        res.json({
+                            users:   users?.total  || 0,
+                            chats:   chats?.total  || 0,
+                            banned:  banned?.total || 0,
+                            recent:  recent?.total || 0,
+                            shared:  shared?.total || 0,
+                        });
+                    });
                 });
             });
         });
@@ -1273,6 +1343,65 @@ serverApp.delete("/api/admin/chats/:userId", requireAdmin, (req, res) => {
     db.run(`DELETE FROM chat_conversations WHERE user_id = ?`, [userId], function(err) {
         if (err) return res.status(500).json({ error: "DB error" });
         res.json({ ok: true, deleted: this.changes });
+    });
+});
+
+// Model health check — test each model with a tiny prompt
+serverApp.get("/api/admin/model-health", requireAdmin, async (req, res) => {
+    // Get current model list
+    let models = NVIDIA_MODELS;
+    try {
+        const row = await new Promise((resolve, reject) => {
+            db.get(`SELECT accent_color FROM user_preferences WHERE user_id = -999`, [], (err, row) => {
+                if (err) reject(err); else resolve(row);
+            });
+        });
+        if (row?.accent_color) {
+            const parsed = JSON.parse(row.accent_color);
+            if (Array.isArray(parsed)) models = parsed;
+        }
+    } catch {}
+
+    // Test just the first 3 models quickly to avoid timeout
+    const results = [];
+    for (const m of models.slice(0, 6)) {
+        const start = Date.now();
+        try {
+            const completion = await openai.chat.completions.create({
+                model: m.id,
+                messages: [{ role: "user", content: "Hi" }],
+                max_tokens: 5,
+            });
+            results.push({ id: m.id, label: m.label, status: "ok", latency: Date.now() - start });
+        } catch (err) {
+            results.push({ id: m.id, label: m.label, status: "error", error: err.message?.slice(0, 80), latency: Date.now() - start });
+        }
+    }
+    res.json(results);
+});
+
+// Site-wide announcement (stored in DB, shown to users on next load)
+serverApp.get("/api/admin/announcement", requireAdmin, (req, res) => {
+    db.get(`SELECT bubble_style as value FROM user_preferences WHERE user_id = -998`, [], (err, row) => {
+        res.json({ announcement: row?.value || "" });
+    });
+});
+serverApp.post("/api/admin/announcement", requireAdmin, (req, res) => {
+    const { announcement } = req.body;
+    db.run(`
+        INSERT INTO user_preferences (user_id, bubble_style)
+        VALUES (-998, ?)
+        ON CONFLICT(user_id) DO UPDATE SET bubble_style = excluded.bubble_style
+    `, [announcement || ""], (err) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// Public endpoint: check for active announcement (any logged-in user)
+serverApp.get("/api/announcement", requireLogin, (req, res) => {
+    db.get(`SELECT bubble_style as value FROM user_preferences WHERE user_id = -998`, [], (err, row) => {
+        res.json({ announcement: row?.value || "" });
     });
 });
 

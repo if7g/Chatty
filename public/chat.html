@@ -26,6 +26,12 @@
 </head>
 <body>
   <div class="container">
+    <!-- Announcement banner (hidden unless admin sets one) -->
+    <div id="announcementBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:500;background:var(--accent);color:#fff;font-size:13px;padding:8px 20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
+      <span id="announcementText"></span>
+      <button onclick="document.getElementById('announcementBar').style.display='none'" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;border-radius:4px;padding:2px 8px;font-size:12px;margin-left:12px">✕</button>
+    </div>
+
     <!-- Mobile sidebar overlay -->
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
@@ -148,8 +154,8 @@
           <div class="pref-row">
             <label class="pref-label">Accent colour</label>
             <div class="color-swatches" id="accentSwatches">
-              <button class="swatch active" data-color="#7c6cf8" style="background:#7c6cf8" title="Purple"></button>
-              <button class="swatch" data-color="#3b82f6" style="background:#3b82f6" title="Blue"></button>
+              <button class="swatch active" data-color="#4a9eff" style="background:#4a9eff" title="Blue"></button>
+              <button class="swatch" data-color="#7c6cf8" style="background:#7c6cf8" title="Purple"></button>
               <button class="swatch" data-color="#10b981" style="background:#10b981" title="Emerald"></button>
               <button class="swatch" data-color="#f59e0b" style="background:#f59e0b" title="Amber"></button>
               <button class="swatch" data-color="#ef4444" style="background:#ef4444" title="Red"></button>
@@ -1488,11 +1494,11 @@ modelSelect.addEventListener("change", () => {
    User Preferences
 ─────────────────────────────────────────────────────────────────── */
 let prefs = {
-  accent_color: "#7c6cf8",
+  accent_color: "#4a9eff",
   font_size: "md",
   bubble_style: "rounded",
   ai_name: "AI",
-  sidebar_width: 252,
+  sidebar_width: 260,
 };
 
 const FONT_SIZES = { sm: "12.5px", md: "13.5px", lg: "15px" };
@@ -1635,6 +1641,17 @@ updateActionButtons();
 fetch("/api/me").then(r => r.json()).then(me => {
   if (me.isAdmin) {
     document.getElementById("adminBtn").style.display = "flex";
+  }
+}).catch(() => {});
+
+// Fetch and show announcement banner if set
+fetch("/api/announcement").then(r => r.json()).then(d => {
+  if (d.announcement) {
+    document.getElementById("announcementText").textContent = d.announcement;
+    const bar = document.getElementById("announcementBar");
+    bar.style.display = "block";
+    // Push content down so the fixed banner doesn't overlap
+    document.querySelector(".container").style.marginTop = bar.offsetHeight + "px";
   }
 }).catch(() => {});
 
