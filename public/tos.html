@@ -7,14 +7,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400;500;600;700&display=swap');
-        body{font-family:'JetBrains Mono',monospace;background:#0b0b0c;color:#e6e6e6}
+        :root{
+          --bg:#1e1f23;
+          --panel:#212327;
+          --border:#2b3035;
+          --accent:#5b8cff;
+          --muted:#b7bac0;
+        }
+        body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:#fff}
         h3{color:#fff}
         p, li{line-height:1.75}
+        .site-header,.site-footer{background:var(--panel)}
+        .site-footer{border-top:1px solid var(--border)}
+        .text-gray-300{color:#d0d3da!important}
+        .text-gray-400{color:var(--muted)!important}
+        .text-gray-500{color:#9aa0ad!important}
+        .text-blue-400{color:var(--accent)!important}
     </style>
 </head>
 <body class="min-h-screen">
 
-  <header class="p-6 bg-[#121212]">
+  <header class="site-header p-6">
     <div class="max-w-7xl mx-auto flex items-center justify-between">
       <h1 class="text-2xl font-bold">Chatty</h1>
       <nav class="space-x-4">
@@ -106,7 +119,7 @@
 
   </main>
 
-  <footer class="p-6 bg-[#151515] text-gray-400 text-sm mt-12">
+  <footer class="site-footer p-6 text-gray-400 text-sm mt-12">
     <div class="max-w-7xl mx-auto text-center">
       &copy; 2026 Chatty. All rights reserved.
     </div>
