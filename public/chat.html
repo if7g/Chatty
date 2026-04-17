@@ -26,6 +26,12 @@
 </head>
 <body>
   <div class="container">
+    <!-- Announcement banner (hidden unless admin sets one) -->
+    <div id="announcementBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:500;background:var(--accent);color:#fff;font-size:13px;padding:8px 20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
+      <span id="announcementText"></span>
+      <button onclick="document.getElementById('announcementBar').style.display='none'" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;border-radius:4px;padding:2px 8px;font-size:12px;margin-left:12px">✕</button>
+    </div>
+
     <!-- Mobile sidebar overlay -->
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
@@ -1658,6 +1664,17 @@ updateActionButtons();
 fetch("/api/me").then(r => r.json()).then(me => {
   if (me.isAdmin) {
     document.getElementById("adminBtn").style.display = "flex";
+  }
+}).catch(() => {});
+
+// Fetch and show announcement banner if set
+fetch("/api/announcement").then(r => r.json()).then(d => {
+  if (d.announcement) {
+    document.getElementById("announcementText").textContent = d.announcement;
+    const bar = document.getElementById("announcementBar");
+    bar.style.display = "block";
+    // Push content down so the fixed banner doesn't overlap
+    document.querySelector(".container").style.marginTop = bar.offsetHeight + "px";
   }
 }).catch(() => {});
 

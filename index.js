@@ -1069,7 +1069,7 @@ serverApp.get("/api/search", requireLogin, (req, res) => {
 });
 
 // ----------------------
-// IMAGE GENERATION (NVIDIA NIM - Stable Diffusion XL)
+// IMAGE GENERATION (NVIDIA NIM - Stable Diffusion / FLUX)
 // ----------------------
 serverApp.post("/api/generate-image", requireLogin, imageLimiter, async (req, res) => {
     const { prompt, width = 1024, height = 1024 } = req.body;
@@ -1082,95 +1082,135 @@ serverApp.post("/api/generate-image", requireLogin, imageLimiter, async (req, re
 
     const authHeaders = {
         "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
     };
 
-    try {
-        // NVIDIA NIM flux-schnell — returns 200 sync or 202 async w/ polling
-        const initRes = await fetch("https://integrate.api.nvidia.com/v1/images/generations", {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({
-                model: "black-forest-labs/flux-schnell",
-                prompt: prompt.trim(),
-                n: 1,
-                width: parseInt(width),
-                height: parseInt(height),
-                response_format: "b64_json",
-            }),
-        });
+    const imageWidth  = Number.parseInt(width, 10) || 1024;
+    const imageHeight = Number.parseInt(height, 10) || 1024;
 
-        if (initRes.status === 401 || initRes.status === 403) {
-            return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
-        }
-        if (initRes.status === 402) {
-            return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com" });
-        }
-        if (initRes.status === 400 || initRes.status === 422) {
-            const t = await initRes.text().catch(() => "");
-            console.error("NVIDIA bad request:", t);
-            return res.status(400).json({ error: "Invalid prompt or parameters. Try a different prompt." });
-        }
+    // Helper: extract base64 image from any NVIDIA NIM image response shape
+    async function extractImage(data) {
+        // Standard: data[0].b64_json
+        const b64 = data?.data?.[0]?.b64_json
+                 || data?.images?.[0]?.b64_json
+                 || data?.artifacts?.[0]?.base64;
+        if (b64) return b64;
 
-        // Helper to extract image from a parsed response body
-        async function extractImage(data) {
-            const b64 = data?.data?.[0]?.b64_json;
-            if (b64) return b64;
-            const url = data?.data?.[0]?.url;
-            if (url) {
+        // URL variant — download and convert
+        const url = data?.data?.[0]?.url
+                 || data?.images?.[0]?.url;
+        if (url) {
+            try {
                 const imgRes = await fetch(url);
+                if (!imgRes.ok) return null;
                 const buf = await imgRes.arrayBuffer();
                 return Buffer.from(buf).toString("base64");
+            } catch {
+                return null;
             }
-            return null;
         }
-
-        // 200 — synchronous response
-        if (initRes.status === 200) {
-            const data = await initRes.json();
-            const b64 = await extractImage(data);
-            if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
-            return res.status(502).json({ error: "No image in response from NVIDIA API" });
-        }
-
-        // 202 — async, poll until done
-        if (initRes.status === 202) {
-            const initData = await initRes.json().catch(() => ({}));
-            const requestId = initRes.headers.get("nvcf-reqid")
-                || initRes.headers.get("request-id")
-                || initData?.requestId || initData?.id;
-
-            if (!requestId) {
-                console.error("202 but no request ID. Headers:", [...initRes.headers.entries()], "Body:", initData);
-                return res.status(502).json({ error: "Image generation started but no tracking ID returned. Please try again." });
-            }
-
-            const pollUrl = `https://integrate.api.nvidia.com/v1/status/${requestId}`;
-            for (let i = 0; i < 30; i++) {
-                await new Promise(r => setTimeout(r, 2000));
-                const pollRes = await fetch(pollUrl, { headers: authHeaders });
-                if (pollRes.status === 202) continue;
-                if (pollRes.status === 200) {
-                    const pollData = await pollRes.json();
-                    const b64 = await extractImage(pollData);
-                    if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
-                    return res.status(502).json({ error: "No image in polling response" });
-                }
-                console.error("Poll error:", pollRes.status, await pollRes.text().catch(() => ""));
-                return res.status(502).json({ error: `Image generation failed during processing (${pollRes.status})` });
-            }
-            return res.status(504).json({ error: "Image generation timed out after 60s. Please try again." });
-        }
-
-        const errText = await initRes.text().catch(() => "");
-        console.error("NVIDIA image gen unexpected status:", initRes.status, errText);
-        return res.status(502).json({ error: `Image generation failed (${initRes.status})` });
-
-    } catch (err) {
-        console.error("Image generation error:", err);
-        res.status(500).json({ error: "Image generation failed: " + err.message });
+        return null;
     }
+
+    // Try flux-schnell first, fall back to sdxl-turbo if unavailable
+    const MODELS = [
+        {
+            url: "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux-schnell",
+            body: {
+                prompt: prompt.trim(),
+                width: imageWidth,
+                height: imageHeight,
+                num_inference_steps: 4,
+                guidance: 0,
+            },
+        },
+        {
+            url: "https://ai.api.nvidia.com/v1/genai/stabilityai/sdxl-turbo",
+            body: {
+                text_prompts: [{ text: prompt.trim(), weight: 1 }],
+                seed: 0,
+                sampler: "K_EULER_ANCESTRAL",
+                steps: 2,
+                cfg_scale: 0,
+            },
+        },
+    ];
+
+    for (const attempt of MODELS) {
+        try {
+            const initRes = await fetch(attempt.url, {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify(attempt.body),
+            });
+
+            if (initRes.status === 401 || initRes.status === 403) {
+                return res.status(401).json({ error: "Invalid NVIDIA API key. Get a free key at build.nvidia.com" });
+            }
+            if (initRes.status === 402) {
+                return res.status(402).json({ error: "NVIDIA free credits exhausted. Check build.nvidia.com" });
+            }
+            if (initRes.status === 400 || initRes.status === 422) {
+                const t = await initRes.text().catch(() => "");
+                console.error("NVIDIA bad request:", t);
+                continue;
+            }
+            if (initRes.status === 404 || initRes.status === 503) {
+                console.warn(`Model at ${attempt.url} unavailable (${initRes.status}), trying next...`);
+                continue;
+            }
+
+            // 200 — synchronous response
+            if (initRes.status === 200) {
+                const data = await initRes.json();
+                const b64 = await extractImage(data);
+                if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+                console.error("200 but no image in body:", JSON.stringify(data).slice(0, 300));
+                continue;
+            }
+
+            // 202 — async polling
+            if (initRes.status === 202) {
+                const initData = await initRes.json().catch(() => ({}));
+                const requestId = initRes.headers.get("nvcf-reqid")
+                    || initRes.headers.get("request-id")
+                    || initData?.requestId
+                    || initData?.id;
+
+                if (!requestId) {
+                    console.error("202 but no request ID:", JSON.stringify(initData).slice(0, 200));
+                    continue;
+                }
+
+                const pollUrl = `https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/${requestId}`;
+                for (let i = 0; i < 30; i++) {
+                    await new Promise((r) => setTimeout(r, 2000));
+                    const pollRes = await fetch(pollUrl, { headers: authHeaders });
+                    if (pollRes.status === 202) continue;
+                    if (pollRes.status === 200) {
+                        const pollData = await pollRes.json();
+                        const b64 = await extractImage(pollData);
+                        if (b64) return res.json({ imageBase64: b64, mimeType: "image/png" });
+                        return res.status(502).json({ error: "No image in polling response" });
+                    }
+                    const errTxt = await pollRes.text().catch(() => "");
+                    console.error("Poll error:", pollRes.status, errTxt);
+                    break;
+                }
+                continue;
+            }
+
+            const errText = await initRes.text().catch(() => "");
+            console.error("NVIDIA image gen unexpected status:", initRes.status, errText);
+            continue;
+        } catch (err) {
+            console.error("Image gen attempt error:", err.message);
+            return res.status(500).json({ error: "Image generation failed: " + err.message });
+        }
+    }
+
+    return res.status(502).json({ error: "All image generation models are currently unavailable. Please try again later." });
 });
 
 // Admin model list override (stored in DB as a special row)
@@ -1249,10 +1289,16 @@ serverApp.get("/api/admin/stats", requireAdmin, (req, res) => {
     db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 0 OR banned IS NULL`, [], (err, users) => {
         db.get(`SELECT COUNT(*) as total FROM chat_conversations`, [], (err2, chats) => {
             db.get(`SELECT COUNT(*) as total FROM users WHERE banned = 1`, [], (err3, banned) => {
-                res.json({
-                    users:   users?.total  || 0,
-                    chats:   chats?.total  || 0,
-                    banned:  banned?.total || 0,
+                db.get(`SELECT COUNT(*) as total FROM users WHERE id > (SELECT COALESCE(MAX(id), 0) - 10 FROM users)`, [], (err4, recent) => {
+                    db.get(`SELECT COUNT(*) as total FROM shared_chats`, [], (err5, shared) => {
+                        res.json({
+                            users: users?.total || 0,
+                            chats: chats?.total || 0,
+                            banned: banned?.total || 0,
+                            recent: recent?.total || 0,
+                            shared: shared?.total || 0,
+                        });
+                    });
                 });
             });
         });
@@ -1339,6 +1385,85 @@ serverApp.delete("/api/admin/chats/:userId", requireAdmin, (req, res) => {
     db.run(`DELETE FROM chat_conversations WHERE user_id = ?`, [userId], function(err) {
         if (err) return res.status(500).json({ error: "DB error" });
         res.json({ ok: true, deleted: this.changes });
+    });
+});
+
+// Delete all shared chats
+serverApp.delete("/api/admin/shared-chats", requireAdmin, (req, res) => {
+    db.run(`DELETE FROM shared_chats`, [], function(err) {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true, deleted: this.changes });
+    });
+});
+
+// Model health check — test each model with a tiny prompt
+serverApp.get("/api/admin/model-health", requireAdmin, async (req, res) => {
+    let models = NVIDIA_MODELS;
+    try {
+        const row = await new Promise((resolve, reject) => {
+            db.get(`SELECT accent_color FROM user_preferences WHERE user_id = -999`, [], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        if (row?.accent_color) {
+            const parsed = JSON.parse(row.accent_color);
+            if (Array.isArray(parsed)) models = parsed;
+        }
+    } catch {}
+
+    const results = [];
+    for (const m of models.slice(0, 6)) {
+        const start = Date.now();
+        try {
+            await openai.chat.completions.create({
+                model: m.id,
+                messages: [{ role: "user", content: "Hi" }],
+                max_tokens: 5,
+            });
+            results.push({
+                id: m.id,
+                label: m.label,
+                status: "ok",
+                latency: Date.now() - start,
+            });
+        } catch (err) {
+            results.push({
+                id: m.id,
+                label: m.label,
+                status: "error",
+                error: err.message?.slice(0, 80),
+                latency: Date.now() - start,
+            });
+        }
+    }
+
+    res.json(results);
+});
+
+// Site-wide announcement (stored in DB, shown to users on next load)
+serverApp.get("/api/admin/announcement", requireAdmin, (req, res) => {
+    db.get(`SELECT bubble_style as value FROM user_preferences WHERE user_id = -998`, [], (err, row) => {
+        res.json({ announcement: row?.value || "" });
+    });
+});
+
+serverApp.post("/api/admin/announcement", requireAdmin, (req, res) => {
+    const { announcement } = req.body;
+    db.run(`
+        INSERT INTO user_preferences (user_id, bubble_style)
+        VALUES (-998, ?)
+        ON CONFLICT(user_id) DO UPDATE SET bubble_style = excluded.bubble_style
+    `, [announcement || ""], (err) => {
+        if (err) return res.status(500).json({ error: "DB error" });
+        res.json({ ok: true });
+    });
+});
+
+// Public endpoint: announcement for logged-in users
+serverApp.get("/api/announcement", requireLogin, (req, res) => {
+    db.get(`SELECT bubble_style as value FROM user_preferences WHERE user_id = -998`, [], (err, row) => {
+        res.json({ announcement: row?.value || "" });
     });
 });
 
